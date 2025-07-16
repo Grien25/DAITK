@@ -7,3 +7,6 @@
 [submodule "tools/objdiff"]
 	path = tools/objdiff
 	url = https://github.com/encounter/objdiff.git
+[submodule "tools/PorpoiseTool"]
+	path = tools/PorpoiseTool
+	url = https://github.com/wowjinxy/PorpoiseTool.git
