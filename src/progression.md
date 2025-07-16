@@ -1,35 +1,25 @@
-# Prototype Progression
+# Platform Progression
 
-The AI-assisted decompilation project can evolve through multiple prototypes. Each stage builds on the previous one, adding more automation and usability.
+This project aims to build a user-friendly platform for decompilation workflows, starting with tooling integration and evolving toward advanced AI features.
 
-## Prototype 0 – Minimal CLI Workflow
-- Script that takes a single `.s` assembly file and its original `.o`.
-- Uses an LLM to generate the matching C code.
-- Compiles with CodeWarrior and compares the resulting object using `objdiff` or a raw binary compare.
-- Output is printed to the console; logs are minimal.
+## Stage 1 – Dtk Template Integration
+- Build a launcher or GUI that makes it easy to run Decomp-Toolkit (dtk-template) workflows.
+- Provide simple controls for splitting binaries, managing function lists, and viewing outputs.
+- Allow users to configure paths, compiler versions, and other settings from the app.
 
-## Prototype 1 – Batch CLI Pipeline
-- Extend the script to process many functions in a batch, iterating over folders like `asm/` and `orig_obj/`.
-- Store generated `.c` files and recompiled `.o` files in dedicated directories.
-- Produce a summary log listing verified matches, mismatches, and compile errors.
-- Provide basic configuration options (paths to compiler, include directories, etc.).
+## Stage 2 – OBJDiff Visualization
+- Integrate OBJDiff into the platform for object file comparison.
+- Enable users to select functions and view detailed diffs between original and recompiled objects.
+- Show assembly and object-level differences in a clear, interactive format.
 
-## Prototype 2 – Basic GUI for Review
-- Create a lightweight desktop app (Electron, Qt, or similar) showing assembly and generated C side by side.
-- Users can run the batch pipeline, then inspect mismatched functions via the GUI.
-- Include controls to trigger recompilation and diff for the selected function.
-- Useful for manual review and quick iteration on troublesome cases.
+## Stage 3 – IDE Features
+- Add code navigation, syntax highlighting, and editing for C and assembly files.
+- Support project-wide search, file browsing, and quick access to function metadata.
+- Provide build and diff controls directly in the IDE interface.
 
-## Prototype 3 – Integrated IDE
-- Evolve the GUI into an IDE-like environment inspired by VSCode or Cursor.
-- Support syntax highlighting, code navigation, and editing of generated C files.
-- Backend exposes APIs for LLM generation, compilation, and diffing so the UI can request these on demand.
-- Allow the user to accept or tweak the AI output and immediately verify the result.
+## Stage 4 – AI Integration
+- Incorporate AI models for automated decompilation and code refinement.
+- Allow users to generate C code from assembly using LLMs, with options to review and edit results.
+- Integrate AI-assisted suggestions and auto-fix tools for mismatches.
 
-## Prototype 4 – Advanced Automation
-- Parallelize LLM calls and compilation to handle large codebases efficiently.
-- Add project management features: track which functions are verified, partially matched, or pending.
-- Offer plug-ins or scripting hooks for custom heuristics (e.g., auto-fixing common mismatches).
-- Provide packaged installers or portable builds for Windows to streamline adoption.
-
-Each prototype moves from a simple proof-of-concept toward a full-featured tool. Starting small keeps the early milestones achievable while leaving room for sophisticated features later on.
+Each stage builds on the previous, moving from basic workflow support to advanced automation and AI-powered features.
