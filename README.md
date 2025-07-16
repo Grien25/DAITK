@@ -189,3 +189,12 @@ project/
 ```
 
 This structured pipeline enables robust and verified assembly-to-C decompilation leveraging automated AI-assisted tools and detailed verification processes.
+
+## VSCode Extension
+
+The `src` folder contains a small VS Code extension used in Stage 1. To try it:
+
+1. Ensure Node.js is installed.
+2. Open `src` in VS Code.
+3. Press `F5` to run the Extension Development Host.
+4. In the command palette (`Ctrl+Shift+P`) run **DAITK: Create dtk-template** to set up the template and walkthrough.

@@ -1,0 +1,45 @@
+{
+  "name": "daitk-extension",
+  "displayName": "DAITK",
+  "description": "Decomp Toolkit integration for VSCode",
+  "version": "0.0.1",
+  "publisher": "daitk",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:daitk.createTemplate",
+    "onCommand:daitk.showGettingStarted",
+    "onWalkthrough:daitk.welcome#*"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "daitk.createTemplate",
+        "title": "DAITK: Create dtk-template"
+      },
+      {
+        "command": "daitk.showGettingStarted",
+        "title": "DAITK: Show Getting Started Guide"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "daitk.welcome",
+        "title": "Getting Started with dtk-template",
+        "description": "Steps to begin using the template",
+        "steps": [
+          {
+            "id": "open-doc",
+            "title": "Read Getting Started",
+            "description": "Open the getting_started guide",
+            "completionEvents": ["onCommand:daitk.showGettingStarted"]
+          }
+        ]
+      }
+    ]
+  },
+  "devDependencies": {}
+}
