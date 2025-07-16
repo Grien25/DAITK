@@ -4,7 +4,7 @@
 The interface guides the user through the first setup steps:
 
 1. Selecting a Wii ISO and extracting it using ``wwt`` to
-   ``tools/dtk-template/orig/GAMEID``.
+   ``Documents/DAITK-Data/dtk-template/orig/GAMEID``.
 2. Optionally renaming ``GAMEID`` throughout the template once the
    extraction succeeds.
 
@@ -21,10 +21,20 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = ROOT / "tools" / "dtk-template"
+# User data lives outside the repository in Documents/DAITK-Data
+DATA_ROOT = Path.home() / "Documents" / "DAITK-Data"
+TEMPLATE_SRC = ROOT / "tools" / "dtk-template"
+TEMPLATE = DATA_ROOT / "dtk-template"
 WBFS_DIR = TEMPLATE / "WBFS"
 ORIG_DIR = TEMPLATE / "orig" / "GAMEID"
 STAGE1 = ROOT / "src" / "scripts" / "stage1.py"
+
+
+def ensure_template() -> None:
+    """Copy the dtk-template tools to the user's data directory if needed."""
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    if not TEMPLATE.exists():
+        shutil.copytree(TEMPLATE_SRC, TEMPLATE)
 
 
 def rename_gameid(root: Path, new_id: str) -> None:
@@ -48,6 +58,7 @@ def rename_gameid(root: Path, new_id: str) -> None:
 class Stage1GUI(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        ensure_template()
         self.title("Stage 1 Launcher")
         self.geometry("450x250")
 

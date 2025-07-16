@@ -8,11 +8,15 @@ Currently it only prints the steps that would be taken.
 import os
 from pathlib import Path
 
-ASM_DIR = Path(__file__).resolve().parent.parent / "asm"
-ORIG_OBJ_DIR = Path(__file__).resolve().parent.parent / "orig_obj"
-RECOMP_OBJ_DIR = Path(__file__).resolve().parent.parent / "recomp_obj"
-SRC_DIR = Path(__file__).resolve().parent.parent / "src"
-LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+# All generated data (asm, objects, logs, etc.) lives alongside the extracted
+# game files in the user's Documents folder.
+DATA_ROOT = Path.home() / "Documents" / "DAITK-Data"
+
+ASM_DIR = DATA_ROOT / "asm"
+ORIG_OBJ_DIR = DATA_ROOT / "orig_obj"
+RECOMP_OBJ_DIR = DATA_ROOT / "recomp_obj"
+SRC_DIR = DATA_ROOT / "src"
+LOG_DIR = DATA_ROOT / "logs"
 
 
 def main():
@@ -26,7 +30,7 @@ def main():
 
 
 if __name__ == "__main__":
-    os.makedirs(RECOMP_OBJ_DIR, exist_ok=True)
-    os.makedirs(SRC_DIR, exist_ok=True)
-    os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(RECOMP_OBJ_DIR, parents=True, exist_ok=True)
+    os.makedirs(SRC_DIR, parents=True, exist_ok=True)
+    os.makedirs(LOG_DIR, parents=True, exist_ok=True)
     main()

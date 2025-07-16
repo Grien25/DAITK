@@ -2,9 +2,11 @@
 """Stage 1 – Dtk Template Integration helper.
 
 This script wraps ``decomp-toolkit`` to generate the initial ``asm/`` and
-``orig_obj/`` folders used by later stages of the pipeline. It simply runs
-``dtk elf disasm`` on the provided game binary and copies the resulting
-assembly and objects into the project directories.
+``orig_obj/`` folders used by later stages of the pipeline. These
+directories now live in the user's ``Documents/DAITK-Data`` folder so
+the data is kept alongside the extracted game files. The script simply
+runs ``dtk elf disasm`` on the provided game binary and copies the
+resulting assembly and objects into those directories.
 """
 
 from __future__ import annotations
@@ -15,9 +17,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-ASM_DIR = ROOT / "asm"
-ORIG_OBJ_DIR = ROOT / "orig_obj"
+# All disassembly output is placed in the user's Documents folder so it can live
+# alongside the extracted game files and template tools.
+DATA_ROOT = Path.home() / "Documents" / "DAITK-Data"
+ASM_DIR = DATA_ROOT / "asm"
+ORIG_OBJ_DIR = DATA_ROOT / "orig_obj"
 
 
 def run_disasm(dtk: Path, binary: Path, out: Path) -> None:
@@ -29,8 +33,8 @@ def run_disasm(dtk: Path, binary: Path, out: Path) -> None:
 def copy_results(temp: Path) -> None:
     asm_src = temp / "asm"
     obj_src = temp / "obj"
-    ASM_DIR.mkdir(exist_ok=True)
-    ORIG_OBJ_DIR.mkdir(exist_ok=True)
+    ASM_DIR.mkdir(parents=True, exist_ok=True)
+    ORIG_OBJ_DIR.mkdir(parents=True, exist_ok=True)
 
     if asm_src.exists():
         for asm_file in asm_src.glob("*.s"):
