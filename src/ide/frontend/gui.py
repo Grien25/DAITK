@@ -24,7 +24,7 @@ import shutil
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
-from tkinter import filedialog
+from tkinter import filedialog, Text, Menu
 
 ROOT = Path(__file__).resolve().parents[2]
 # User data lives outside the repository in Documents/DAITK-Data
@@ -104,6 +104,65 @@ def rename_gameid(root: Path, new_id: str) -> None:
         if placeholder in path.name and path.exists():
             path.rename(path.with_name(path.name.replace(placeholder, new_id)))
 
+
+class MiniIDE(ttk.Toplevel):
+    """Very small text editor window as a lightweight VSCode-like IDE."""
+
+    def __init__(self, master: ttk.Window) -> None:
+        super().__init__(master)
+        self.title("DAITK IDE")
+        self.geometry("800x600")
+
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=BOTH, expand=YES)
+
+        self.tabs: dict[Path, tuple[ttk.Frame, Text]] = {}
+
+        menubar = Menu(self)
+        file_menu = Menu(menubar, tearoff=False)
+        file_menu.add_command(label="Open…", command=self.open_dialog)
+        file_menu.add_command(label="Save", command=self.save_current)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.config(menu=menubar)
+
+    def open_dialog(self) -> None:
+        path = filedialog.askopenfilename()
+        if path:
+            self.open_file(Path(path))
+
+    def open_file(self, path: Path) -> None:
+        if path in self.tabs:
+            frame, _ = self.tabs[path]
+            self.notebook.select(frame)
+            return
+
+        frame = ttk.Frame(self.notebook)
+        text = Text(frame, wrap="none", undo=True)
+        text.pack(fill=BOTH, expand=YES)
+
+        try:
+            text.insert("1.0", path.read_text())
+        except Exception as exc:
+            Messagebox.show_error("Open failed", str(exc))
+            return
+
+        self.notebook.add(frame, text=path.name)
+        self.tabs[path] = (frame, text)
+        self.notebook.select(frame)
+
+    def save_current(self) -> None:
+        current = self.notebook.select()
+        if not current:
+            return
+        frame = self.notebook.nametowidget(current)
+        for path, (fr, text) in self.tabs.items():
+            if fr == frame:
+                try:
+                    path.write_text(text.get("1.0", "end-1c"))
+                    self.title(f"DAITK IDE – {path.name} saved")
+                except Exception as exc:
+                    Messagebox.show_error("Save failed", str(exc))
+
 class Stage1GUI(ttk.Window):
     def __init__(self) -> None:
         super().__init__(title="Stage 1 Launcher", themename="flatly", size=(500, 320))
@@ -113,6 +172,7 @@ class Stage1GUI(ttk.Window):
         self.game_id = ttk.StringVar()
         self.dtk_path = ttk.StringVar(value="dtk")
         self.status = ttk.StringVar()
+        self.ide: MiniIDE | None = None
 
         container = ttk.Frame(self, padding=15)
         container.pack(fill=BOTH, expand=YES)
@@ -142,12 +202,14 @@ class Stage1GUI(ttk.Window):
             .pack(side=LEFT, padx=5)
         ttk.Button(edit_frame, text="Edit configure.py", command=self.edit_configure, bootstyle="light")\
             .pack(side=LEFT, padx=5)
+        ttk.Button(container, text="Open IDE", command=self.show_ide, bootstyle="secondary")\
+            .grid(row=5, column=0, columnspan=3)
 
         ttk.Button(container, text="Run configure.py", command=self.run_configure, bootstyle="primary")\
-            .grid(row=5, column=0, columnspan=3, pady=10)
+            .grid(row=6, column=0, columnspan=3, pady=10)
 
         ttk.Label(container, textvariable=self.status, foreground="blue")\
-            .grid(row=6, column=0, columnspan=3, sticky=W)
+            .grid(row=7, column=0, columnspan=3, sticky=W)
 
     def select_iso(self) -> None:
         path = filedialog.askopenfilename(title="Select Wii ISO or WBFS", filetypes=[("Wii ISO/WBFS", "*.iso *.wbfs"), ("All files", "*")])
@@ -217,6 +279,13 @@ class Stage1GUI(ttk.Window):
 
         threading.Thread(target=task, daemon=True).start()
 
+    def show_ide(self) -> None:
+        if self.ide is None or not self.ide.winfo_exists():
+            self.ide = MiniIDE(self)
+        else:
+            self.ide.deiconify()
+            self.ide.lift()
+
     def rename_gameid(self) -> None:
         new_id = self.game_id.get().strip().upper()
         if not new_id:
@@ -261,15 +330,30 @@ class Stage1GUI(ttk.Window):
     def edit_config(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
         path = TEMPLATE / "config" / game_id / "config.yml"
-        open_file(path)
+        if os.environ.get("EDITOR") or os.environ.get("VISUAL"):
+            open_file(path)
+        else:
+            self.show_ide()
+            if self.ide:
+                self.ide.open_file(path)
 
     def edit_sha1(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
         path = TEMPLATE / "config" / game_id / "build.sha1"
-        open_file(path)
+        if os.environ.get("EDITOR") or os.environ.get("VISUAL"):
+            open_file(path)
+        else:
+            self.show_ide()
+            if self.ide:
+                self.ide.open_file(path)
 
     def edit_configure(self) -> None:
-        open_file(CONFIGURE)
+        if os.environ.get("EDITOR") or os.environ.get("VISUAL"):
+            open_file(CONFIGURE)
+        else:
+            self.show_ide()
+            if self.ide:
+                self.ide.open_file(CONFIGURE)
 
     def run_configure(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
