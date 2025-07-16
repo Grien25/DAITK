@@ -49,11 +49,11 @@ Test the LLM by running a simple prompt to ensure it loads correctly.
 •src\ for AI-generated C files (if you choose to save them),
 •logs\ for any logs or diff outputs.
 
-With these tools in place, you can proceed to orchestrate the decompilation and verification pipeline.
-The directories above are already present under `project idea/`.
-Check out `scripts/pipeline.py` for a prototype that walks the `asm/` folder and
-prints the steps needed for decompilation.
-Expand it to integrate your LLM and the CodeWarrior compiler.
+With these tools in place, you can proceed to orchestrate the decompilation and verification pipeline. The directories above are already present under `project idea/`.
+
+Use `scripts/stage1.py` (or the GUI at `ide/frontend/gui.py`) to extract assembly and original object files from a game binary with **decomp-toolkit**. This populates the `asm/` and `orig_obj/` folders.
+
+Check out `scripts/pipeline.py` for a prototype that walks the `asm/` folder and prints the steps needed for decompilation. Expand it to integrate your LLM and the CodeWarrior compiler.
 
 ## Directory Overview
 
@@ -62,7 +62,7 @@ Expand it to integrate your LLM and the CodeWarrior compiler.
 - `recomp_obj/` – Objects recompiled from generated C.
 - `src/` – Generated C sources.
 - `logs/` – Diff and build logs.
-- `scripts/` – Automation helpers like `pipeline.py`.
+- `scripts/` – Automation helpers like `stage1.py` and `pipeline.py`.
 - `ide/` – Prototype GUI comparing assembly and C code.
 
 
