@@ -1,3 +1,5 @@
+# (legacy) data directories that were previously inside the repository
+# The project now stores extracted assets under ~/Documents/DAITK-Data
 /src/tools/dtk-template/orig
 /src/tools/dtk-template/WBFS
 *.DS_Store

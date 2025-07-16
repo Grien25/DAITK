@@ -4,7 +4,7 @@
 The interface guides the user through the first setup steps:
 
 1. Selecting a Wii ISO and extracting it using ``wwt`` to
-   ``tools/dtk-template/orig/GAMEID``.
+   ``Documents/DAITK-Data/dtk-template/orig/GAMEID``.
 2. Optionally renaming ``GAMEID`` throughout the template once the
    extraction succeeds.
 
@@ -15,16 +15,73 @@ using ``decomp-toolkit``.
 from __future__ import annotations
 
 import subprocess
+import sys
+import os
+import hashlib
+import threading
 from pathlib import Path
 import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE = ROOT / "tools" / "dtk-template"
+# User data lives outside the repository in Documents/DAITK-Data
+DATA_ROOT = Path.home() / "Documents" / "DAITK-Data"
+TEMPLATE_SRC = ROOT / "tools" / "dtk-template"
+TEMPLATE = DATA_ROOT / "dtk-template"
 WBFS_DIR = TEMPLATE / "WBFS"
 ORIG_DIR = TEMPLATE / "orig" / "GAMEID"
 STAGE1 = ROOT / "src" / "scripts" / "stage1.py"
+CONFIGURE = TEMPLATE / "configure.py"
+
+
+def open_file(path: Path) -> None:
+    """Open *path* in a reasonable editor.
+
+    The function prefers ``$EDITOR`` if set, otherwise tries common
+    editors like VS Code or Wordpad so that files such as ``build.sha1``
+    open even when no default application is registered.  This avoids
+    the "no application knows how to open" error on macOS.
+    """
+
+    cmd: list[str] | None = None
+
+    # Honour any explicit editor choice from the environment first
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+    if editor:
+        cmd = editor.split() + [str(path)]
+    elif shutil.which("code"):
+        cmd = ["code", str(path)]
+    elif sys.platform.startswith("win"):
+        # Wordpad ("write") is available on all Windows systems; fall back
+        # to notepad if it fails
+        cmd = ["write", str(path)] if shutil.which("write") else ["notepad", str(path)]
+    elif sys.platform == "darwin":
+        # Use TextEdit via ``open -a`` so files without a default handler open
+        cmd = ["open", "-a", "TextEdit", str(path)]
+    else:
+        cmd = ["xdg-open", str(path)]
+
+    try:
+        subprocess.Popen(cmd)
+    except Exception as exc:
+        messagebox.showerror("Open failed", str(exc))
+
+
+def sha1sum(path: Path) -> str:
+    """Return the SHA-1 hex digest of the given file."""
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def ensure_template() -> None:
+    """Copy the dtk-template tools to the user's data directory if needed."""
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    if not TEMPLATE.exists():
+        shutil.copytree(TEMPLATE_SRC, TEMPLATE)
 
 
 def rename_gameid(root: Path, new_id: str) -> None:
@@ -48,6 +105,7 @@ def rename_gameid(root: Path, new_id: str) -> None:
 class Stage1GUI(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        ensure_template()
         self.title("Stage 1 Launcher")
         self.geometry("450x250")
 
@@ -73,6 +131,14 @@ class Stage1GUI(tk.Tk):
 
         tk.Button(self, text="Run Stage 1", command=self.run_stage1).pack(pady=5)
 
+        edit_frame = tk.Frame(self)
+        edit_frame.pack(pady=5)
+        tk.Button(edit_frame, text="Edit config.yml", command=self.edit_config).pack(side="left", padx=5)
+        tk.Button(edit_frame, text="Edit build.sha1", command=self.edit_sha1).pack(side="left", padx=5)
+        tk.Button(edit_frame, text="Edit configure.py", command=self.edit_configure).pack(side="left", padx=5)
+
+        tk.Button(self, text="Run configure.py", command=self.run_configure).pack(pady=5)
+
         tk.Label(self, textvariable=self.status, fg="blue").pack(padx=10)
 
     def select_iso(self) -> None:
@@ -81,57 +147,134 @@ class Stage1GUI(tk.Tk):
             self.iso_path.set(path)
 
     def extract_iso(self) -> None:
+        """Extract the selected ISO in a background thread.
+
+        Heavy operations like file copying and invoking Wiimms tools can block
+        the Tk event loop. By running them in ``threading.Thread`` we keep the
+        UI responsive. All widget updates are scheduled back on the main thread
+        using ``self.after``.
+        """
+
         iso = Path(self.iso_path.get())
         if not iso.is_file():
             messagebox.showerror("Error", "Invalid ISO/WBFS path")
             return
-        WBFS_DIR.mkdir(parents=True, exist_ok=True)
-        dest_iso = WBFS_DIR / iso.name
-        try:
-            shutil.copy2(iso, dest_iso)
-        except OSError as exc:
-            messagebox.showerror("Copy failed", str(exc))
-            return
-        ORIG_DIR.mkdir(parents=True, exist_ok=True)
-        if dest_iso.suffix.lower() == ".wbfs":
-            # Extract the full filesystem (main.dol, .rel, etc. will be present in output)
-            cmd = ["wit", "extract", "--overwrite", str(dest_iso), str(ORIG_DIR)]
-        else:
-            cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
-        try:
-            subprocess.run(cmd, check=True)
-        except FileNotFoundError:
-            messagebox.showerror("Tool not found", "Install Wiimms ISO Tools and ensure 'wit' and 'wwt' are in PATH")
-            return
-        except subprocess.CalledProcessError as exc:
-            messagebox.showerror("Extraction failed", str(exc))
-            return
 
-        if any(ORIG_DIR.iterdir()):
-            self.status.set("Extraction complete")
-            self.rename_btn.config(state="normal")
-        else:
-            self.status.set("Extraction produced no files")
+        self.status.set("Extracting…")
+        self.rename_btn.config(state="disabled")
+
+        def task() -> None:
+            WBFS_DIR.mkdir(parents=True, exist_ok=True)
+            dest_iso = WBFS_DIR / iso.name
+            try:
+                shutil.copy2(iso, dest_iso)
+            except OSError as exc:
+                self.after(0, lambda: messagebox.showerror("Copy failed", str(exc)))
+                return
+
+            ORIG_DIR.mkdir(parents=True, exist_ok=True)
+            if dest_iso.suffix.lower() == ".wbfs":
+                cmd = ["wit", "extract", "--overwrite", str(dest_iso), str(ORIG_DIR)]
+            else:
+                cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
+
+            try:
+                subprocess.run(cmd, check=True)
+            except FileNotFoundError:
+                self.after(0, lambda: messagebox.showerror(
+                    "Tool not found",
+                    "Install Wiimms ISO Tools and ensure 'wit' and 'wwt' are in PATH",
+                ))
+                return
+            except subprocess.CalledProcessError as exc:
+                self.after(0, lambda: messagebox.showerror("Extraction failed", str(exc)))
+                return
+
+            sha1 = None
+            if any(ORIG_DIR.iterdir()):
+                main_dol = ORIG_DIR / "sys" / "main.dol"
+                if main_dol.exists():
+                    sha1 = sha1sum(main_dol)
+
+            def finish() -> None:
+                if sha1:
+                    self.status.set(f"Extraction complete\nmain.dol sha1: {sha1}")
+                elif any(ORIG_DIR.iterdir()):
+                    self.status.set("Extraction complete")
+                else:
+                    self.status.set("Extraction produced no files")
+                self.rename_btn.config(state="normal")
+
+            self.after(0, finish)
+
+        threading.Thread(target=task, daemon=True).start()
 
     def rename_gameid(self) -> None:
         new_id = self.game_id.get().strip().upper()
         if not new_id:
             messagebox.showerror("Error", "Enter a Game ID")
             return
-        try:
-            rename_gameid(TEMPLATE, new_id)
-        except Exception as exc:
-            messagebox.showerror("Rename failed", str(exc))
-            return
-        self.status.set(f"Renamed to {new_id}")
+
+        self.status.set("Renaming…")
+
+        def task() -> None:
+            try:
+                rename_gameid(TEMPLATE, new_id)
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("Rename failed", str(exc)))
+                return
+            self.after(0, lambda: self.status.set(f"Renamed to {new_id}"))
+
+        threading.Thread(target=task, daemon=True).start()
 
     def run_stage1(self) -> None:
-        cmd = ["python3", str(STAGE1), str(ORIG_DIR / "sys" / "main.dol"), "--dtk", self.dtk_path.get()]
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        binary = TEMPLATE / "orig" / game_id / "sys" / "main.dol"
+        cmd = [
+            "python3",
+            str(STAGE1),
+            str(binary),
+            "--dtk",
+            self.dtk_path.get(),
+        ]
+
+        self.status.set("Running Stage 1…")
+
+        def task() -> None:
+            try:
+                subprocess.run(cmd, check=True)
+            except subprocess.CalledProcessError as exc:
+                self.after(0, lambda: messagebox.showerror("Stage 1 failed", str(exc)))
+                return
+            self.after(0, lambda: self.status.set("Stage 1 completed"))
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def edit_config(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        path = TEMPLATE / "config" / game_id / "config.yml"
+        open_file(path)
+
+    def edit_sha1(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        path = TEMPLATE / "config" / game_id / "build.sha1"
+        open_file(path)
+
+    def edit_configure(self) -> None:
+        open_file(CONFIGURE)
+
+    def run_configure(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
         try:
-            subprocess.run(cmd, check=True)
-            self.status.set("Stage 1 completed")
+            subprocess.run([
+                "python3",
+                str(CONFIGURE),
+                "--version",
+                game_id,
+            ], cwd=TEMPLATE, check=True)
+            self.status.set("configure.py completed")
         except subprocess.CalledProcessError as exc:
-            messagebox.showerror("Stage 1 failed", str(exc))
+            messagebox.showerror("configure.py failed", str(exc))
 
 
 if __name__ == "__main__":
