@@ -15,6 +15,9 @@ using ``decomp-toolkit``.
 from __future__ import annotations
 
 import subprocess
+import sys
+import os
+import hashlib
 from pathlib import Path
 import shutil
 import tkinter as tk
@@ -28,6 +31,32 @@ TEMPLATE = DATA_ROOT / "dtk-template"
 WBFS_DIR = TEMPLATE / "WBFS"
 ORIG_DIR = TEMPLATE / "orig" / "GAMEID"
 STAGE1 = ROOT / "src" / "scripts" / "stage1.py"
+
+
+def open_file(path: Path) -> None:
+    """Open *path* in the user's preferred editor or associated program."""
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(path)  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            editor = os.environ.get("EDITOR")
+            if editor:
+                subprocess.Popen([editor, str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+    except Exception as exc:
+        messagebox.showerror("Open failed", str(exc))
+
+
+def sha1sum(path: Path) -> str:
+    """Return the SHA-1 hex digest of the given file."""
+    h = hashlib.sha1()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def ensure_template() -> None:
@@ -84,6 +113,11 @@ class Stage1GUI(tk.Tk):
 
         tk.Button(self, text="Run Stage 1", command=self.run_stage1).pack(pady=5)
 
+        edit_frame = tk.Frame(self)
+        edit_frame.pack(pady=5)
+        tk.Button(edit_frame, text="Edit config.yml", command=self.edit_config).pack(side="left", padx=5)
+        tk.Button(edit_frame, text="Edit build.sha1", command=self.edit_sha1).pack(side="left", padx=5)
+
         tk.Label(self, textvariable=self.status, fg="blue").pack(padx=10)
 
     def select_iso(self) -> None:
@@ -119,7 +153,14 @@ class Stage1GUI(tk.Tk):
             return
 
         if any(ORIG_DIR.iterdir()):
-            self.status.set("Extraction complete")
+            sha1 = None
+            main_dol = ORIG_DIR / "sys" / "main.dol"
+            if main_dol.exists():
+                sha1 = sha1sum(main_dol)
+            if sha1:
+                self.status.set(f"Extraction complete\nmain.dol sha1: {sha1}")
+            else:
+                self.status.set("Extraction complete")
             self.rename_btn.config(state="normal")
         else:
             self.status.set("Extraction produced no files")
@@ -156,6 +197,16 @@ class Stage1GUI(tk.Tk):
             self.status.set("Stage 1 completed")
         except subprocess.CalledProcessError as exc:
             messagebox.showerror("Stage 1 failed", str(exc))
+
+    def edit_config(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        path = TEMPLATE / "config" / game_id / "config.yml"
+        open_file(path)
+
+    def edit_sha1(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        path = TEMPLATE / "config" / game_id / "build.sha1"
+        open_file(path)
 
 
 if __name__ == "__main__":
