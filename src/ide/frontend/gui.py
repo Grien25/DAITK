@@ -182,18 +182,13 @@ class Stage1GUI(tk.Tk):
 
     def run_stage1(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
-        orig_dir = TEMPLATE / "orig" / game_id
-        config_dir = TEMPLATE / "config" / game_id
+        binary = TEMPLATE / "orig" / game_id / "sys" / "main.dol"
         cmd = [
             "python3",
             str(STAGE1),
-            str(orig_dir / "sys" / "main.dol"),
+            str(binary),
             "--dtk",
             self.dtk_path.get(),
-            "--orig-dir",
-            str(orig_dir),
-            "--config-dir",
-            str(config_dir),
         ]
         try:
             subprocess.run(cmd, check=True)

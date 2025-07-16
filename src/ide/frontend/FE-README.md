@@ -5,8 +5,7 @@ handles the first steps of setting up the project:
 
 1. Select a Wii ISO and extract it with `wwt` into `Documents/DAITK-Data/dtk-template/orig/GAMEID`.
 2. Rename the placeholder `GAMEID` once the extraction succeeds.
-3. Optionally run `stage1.py` to split the `main.dol` using `decomp-toolkit` and
-   create `config/[GAMEID]/build.sha1` for verification.
+3. Optionally run `stage1.py` to split the `main.dol` using `decomp-toolkit`.
 4. Open `config.yml` or `build.sha1` in your editor from the GUI to tweak paths
    or modules, then run `configure.py` to create `build.ninja`.
 
