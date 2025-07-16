@@ -17,6 +17,29 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+
+def generate_build_sha1(dtk: Path, orig_dir: Path, config_dir: Path) -> None:
+    """Generate build.sha1 from files in orig_dir."""
+    main_dol = orig_dir / "sys" / "main.dol"
+    rels = sorted((orig_dir / "files").glob("*.rel"))
+    out_path = config_dir / "build.sha1"
+    cmd = [str(dtk), "shasum", str(main_dol)] + [str(r) for r in rels] + ["-o", str(out_path)]
+    subprocess.run(cmd, check=True)
+
+    game_id = orig_dir.name
+    lines = []
+    for line in out_path.read_text().splitlines():
+        h, p = line.split(maxsplit=1)
+        src = Path(p)
+        if src.name == "main.dol":
+            new_p = Path("build") / game_id / "main.dol"
+        else:
+            name = src.stem
+            new_p = Path("build") / game_id / name / f"{name}.rel"
+        lines.append(f"{h}  {new_p}")
+    out_path.write_text("\n".join(lines) + "\n")
+
+
 # All disassembly output is placed in the user's Documents folder so it can live
 # alongside the extracted game files and template tools.
 DATA_ROOT = Path.home() / "Documents" / "DAITK-Data"
@@ -48,6 +71,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run decomp-toolkit disassembly")
     parser.add_argument("binary", help="Path to the game's DOL or ELF file")
     parser.add_argument("--dtk", default="dtk", help="Path to decomp-toolkit executable")
+    parser.add_argument("--orig-dir", type=Path, help="Path to orig/[GAMEID]", default=None)
+    parser.add_argument("--config-dir", type=Path, help="Path to config/[GAMEID]", default=None)
     args = parser.parse_args()
 
     dtk = Path(args.dtk)
@@ -57,6 +82,9 @@ def main() -> None:
         tmp_path = Path(tmpdir)
         run_disasm(dtk, binary, tmp_path)
         copy_results(tmp_path)
+
+    if args.orig_dir and args.config_dir:
+        generate_build_sha1(dtk, args.orig_dir, args.config_dir)
 
 
 if __name__ == "__main__":
