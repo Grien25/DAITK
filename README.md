@@ -51,7 +51,10 @@ Test the LLM by running a simple prompt to ensure it loads correctly.
 
 With these tools in place, you can proceed to orchestrate the decompilation and verification pipeline. The directories above are already present under `project idea/`.
 
-Use `scripts/stage1.py` (or the GUI at `ide/frontend/gui.py`) to extract assembly and original object files from a game binary with **decomp-toolkit**. This populates the `asm/` and `orig_obj/` folders.
+Use `scripts/stage1.py` or the GUI (`ide/frontend/gui.py`) for the initial setup.
+The GUI can copy a Wii ISO, extract it with `wwt`, rename the project `GAMEID`,
+and then run `stage1.py` to populate the `asm/` and `orig_obj/` folders with
+**decomp-toolkit**.
 
 Check out `scripts/pipeline.py` for a prototype that walks the `asm/` folder and prints the steps needed for decompilation. Expand it to integrate your LLM and the CodeWarrior compiler.
 
