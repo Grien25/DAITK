@@ -2,3 +2,4 @@
 # Uncomment and adjust versions as needed
 #gpt4all
 #transformers
+ttkbootstrap
