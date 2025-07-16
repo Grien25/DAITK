@@ -18,6 +18,7 @@ import subprocess
 import sys
 import os
 import hashlib
+import threading
 from pathlib import Path
 import shutil
 import tkinter as tk
@@ -129,56 +130,85 @@ class Stage1GUI(tk.Tk):
             self.iso_path.set(path)
 
     def extract_iso(self) -> None:
+        """Extract the selected ISO in a background thread.
+
+        Heavy operations like file copying and invoking Wiimms tools can block
+        the Tk event loop. By running them in ``threading.Thread`` we keep the
+        UI responsive. All widget updates are scheduled back on the main thread
+        using ``self.after``.
+        """
+
         iso = Path(self.iso_path.get())
         if not iso.is_file():
             messagebox.showerror("Error", "Invalid ISO/WBFS path")
             return
-        WBFS_DIR.mkdir(parents=True, exist_ok=True)
-        dest_iso = WBFS_DIR / iso.name
-        try:
-            shutil.copy2(iso, dest_iso)
-        except OSError as exc:
-            messagebox.showerror("Copy failed", str(exc))
-            return
-        ORIG_DIR.mkdir(parents=True, exist_ok=True)
-        if dest_iso.suffix.lower() == ".wbfs":
-            # Extract the full filesystem (main.dol, .rel, etc. will be present in output)
-            cmd = ["wit", "extract", "--overwrite", str(dest_iso), str(ORIG_DIR)]
-        else:
-            cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
-        try:
-            subprocess.run(cmd, check=True)
-        except FileNotFoundError:
-            messagebox.showerror("Tool not found", "Install Wiimms ISO Tools and ensure 'wit' and 'wwt' are in PATH")
-            return
-        except subprocess.CalledProcessError as exc:
-            messagebox.showerror("Extraction failed", str(exc))
-            return
 
-        if any(ORIG_DIR.iterdir()):
-            sha1 = None
-            main_dol = ORIG_DIR / "sys" / "main.dol"
-            if main_dol.exists():
-                sha1 = sha1sum(main_dol)
-            if sha1:
-                self.status.set(f"Extraction complete\nmain.dol sha1: {sha1}")
+        self.status.set("Extracting…")
+        self.rename_btn.config(state="disabled")
+
+        def task() -> None:
+            WBFS_DIR.mkdir(parents=True, exist_ok=True)
+            dest_iso = WBFS_DIR / iso.name
+            try:
+                shutil.copy2(iso, dest_iso)
+            except OSError as exc:
+                self.after(0, lambda: messagebox.showerror("Copy failed", str(exc)))
+                return
+
+            ORIG_DIR.mkdir(parents=True, exist_ok=True)
+            if dest_iso.suffix.lower() == ".wbfs":
+                cmd = ["wit", "extract", "--overwrite", str(dest_iso), str(ORIG_DIR)]
             else:
-                self.status.set("Extraction complete")
-            self.rename_btn.config(state="normal")
-        else:
-            self.status.set("Extraction produced no files")
+                cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
+
+            try:
+                subprocess.run(cmd, check=True)
+            except FileNotFoundError:
+                self.after(0, lambda: messagebox.showerror(
+                    "Tool not found",
+                    "Install Wiimms ISO Tools and ensure 'wit' and 'wwt' are in PATH",
+                ))
+                return
+            except subprocess.CalledProcessError as exc:
+                self.after(0, lambda: messagebox.showerror("Extraction failed", str(exc)))
+                return
+
+            sha1 = None
+            if any(ORIG_DIR.iterdir()):
+                main_dol = ORIG_DIR / "sys" / "main.dol"
+                if main_dol.exists():
+                    sha1 = sha1sum(main_dol)
+
+            def finish() -> None:
+                if sha1:
+                    self.status.set(f"Extraction complete\nmain.dol sha1: {sha1}")
+                elif any(ORIG_DIR.iterdir()):
+                    self.status.set("Extraction complete")
+                else:
+                    self.status.set("Extraction produced no files")
+                self.rename_btn.config(state="normal")
+
+            self.after(0, finish)
+
+        threading.Thread(target=task, daemon=True).start()
 
     def rename_gameid(self) -> None:
         new_id = self.game_id.get().strip().upper()
         if not new_id:
             messagebox.showerror("Error", "Enter a Game ID")
             return
-        try:
-            rename_gameid(TEMPLATE, new_id)
-        except Exception as exc:
-            messagebox.showerror("Rename failed", str(exc))
-            return
-        self.status.set(f"Renamed to {new_id}")
+
+        self.status.set("Renaming…")
+
+        def task() -> None:
+            try:
+                rename_gameid(TEMPLATE, new_id)
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("Rename failed", str(exc)))
+                return
+            self.after(0, lambda: self.status.set(f"Renamed to {new_id}"))
+
+        threading.Thread(target=task, daemon=True).start()
 
     def run_stage1(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
@@ -190,11 +220,18 @@ class Stage1GUI(tk.Tk):
             "--dtk",
             self.dtk_path.get(),
         ]
-        try:
-            subprocess.run(cmd, check=True)
-            self.status.set("Stage 1 completed")
-        except subprocess.CalledProcessError as exc:
-            messagebox.showerror("Stage 1 failed", str(exc))
+
+        self.status.set("Running Stage 1…")
+
+        def task() -> None:
+            try:
+                subprocess.run(cmd, check=True)
+            except subprocess.CalledProcessError as exc:
+                self.after(0, lambda: messagebox.showerror("Stage 1 failed", str(exc)))
+                return
+            self.after(0, lambda: self.status.set("Stage 1 completed"))
+
+        threading.Thread(target=task, daemon=True).start()
 
     def edit_config(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"

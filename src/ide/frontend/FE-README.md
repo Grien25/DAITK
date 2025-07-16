@@ -16,6 +16,8 @@ python3 gui.py
 ```
 
 The GUI will ask for your game ISO and (if needed) the path to
-`decomp-toolkit`. After extracting the ISO you can rename the project
-GameID, view the SHA-1 of `main.dol`, edit the configuration files,
-run Stage 1, and finally execute `configure.py` to set up the build.
+`decomp-toolkit`. Heavy operations such as extraction and Stage 1 run in
+background threads so the window remains responsive. After extracting the
+ISO you can rename the project GameID, view the SHA-1 of `main.dol`, edit
+the configuration files, run Stage 1, and finally execute `configure.py`
+to set up the build.
