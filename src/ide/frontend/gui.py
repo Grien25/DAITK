@@ -135,6 +135,7 @@ class Stage1GUI(tk.Tk):
         edit_frame.pack(pady=5)
         tk.Button(edit_frame, text="Edit config.yml", command=self.edit_config).pack(side="left", padx=5)
         tk.Button(edit_frame, text="Edit build.sha1", command=self.edit_sha1).pack(side="left", padx=5)
+        tk.Button(edit_frame, text="Edit configure.py", command=self.edit_configure).pack(side="left", padx=5)
 
         tk.Button(self, text="Run configure.py", command=self.run_configure).pack(pady=5)
 
@@ -258,6 +259,9 @@ class Stage1GUI(tk.Tk):
         game_id = self.game_id.get().strip().upper() or "GAMEID"
         path = TEMPLATE / "config" / game_id / "build.sha1"
         open_file(path)
+
+    def edit_configure(self) -> None:
+        open_file(CONFIGURE)
 
     def run_configure(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
