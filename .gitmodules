@@ -1,0 +1,9 @@
+[submodule "tools/decomp-toolkit"]
+	path = tools/decomp-toolkit
+	url = https://github.com/encounter/decomp-toolkit.git
+[submodule "tools/dtk-template"]
+	path = tools/dtk-template
+	url = https://github.com/encounter/dtk-template.git
+[submodule "tools/objdiff"]
+	path = tools/objdiff
+	url = https://github.com/encounter/objdiff.git
