@@ -36,18 +36,34 @@ CONFIGURE = TEMPLATE / "configure.py"
 
 
 def open_file(path: Path) -> None:
-    """Open *path* in the user's preferred editor or associated program."""
+    """Open *path* in a reasonable editor.
+
+    The function prefers ``$EDITOR`` if set, otherwise tries common
+    editors like VS Code or Wordpad so that files such as ``build.sha1``
+    open even when no default application is registered.  This avoids
+    the "no application knows how to open" error on macOS.
+    """
+
+    cmd: list[str] | None = None
+
+    # Honour any explicit editor choice from the environment first
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+    if editor:
+        cmd = editor.split() + [str(path)]
+    elif shutil.which("code"):
+        cmd = ["code", str(path)]
+    elif sys.platform.startswith("win"):
+        # Wordpad ("write") is available on all Windows systems; fall back
+        # to notepad if it fails
+        cmd = ["write", str(path)] if shutil.which("write") else ["notepad", str(path)]
+    elif sys.platform == "darwin":
+        # Use TextEdit via ``open -a`` so files without a default handler open
+        cmd = ["open", "-a", "TextEdit", str(path)]
+    else:
+        cmd = ["xdg-open", str(path)]
+
     try:
-        if sys.platform.startswith("win"):
-            os.startfile(path)  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        else:
-            editor = os.environ.get("EDITOR")
-            if editor:
-                subprocess.Popen([editor, str(path)])
-            else:
-                subprocess.Popen(["xdg-open", str(path)])
+        subprocess.Popen(cmd)
     except Exception as exc:
         messagebox.showerror("Open failed", str(exc))
 

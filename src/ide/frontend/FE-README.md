@@ -9,6 +9,9 @@ handles the first steps of setting up the project:
 4. Open `config.yml` or `build.sha1` in your editor from the GUI to tweak paths
    or modules, then run `configure.py` to create `build.ninja`.
 
+If the `EDITOR` environment variable is not set, the GUI will try to open
+those files in VS Code or a basic editor like Wordpad/TextEdit.
+
 Run it with:
 
 ```bash
