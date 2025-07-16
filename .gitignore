@@ -1,3 +1,4 @@
 /src/tools/dtk-template/orig
 /src/tools/dtk-template/WBFS
 *.DS_Store
+.DS_Store
