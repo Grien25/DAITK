@@ -10,7 +10,10 @@ the project:
 3. Optionally run `stage1.py` to split the `main.dol` using `decomp-toolkit`.
 4. Use the built-in IDE to edit `config.yml`, `build.sha1`, or `configure.py`
    directly from the GUI in a tabbed editor with a file tree, then run
-   `configure.py` to create `build.ninja`.
+   `configure.py` to create `build.ninja`. A small tour opens on first launch
+   to guide you through these files.
+5. A bottom terminal panel lets you run commands inside the `dtk-template`
+   folder without leaving the GUI.
 
 If you prefer an external editor, set the `EDITOR` environment variable and
 the GUI will open files there instead of in the integrated IDE.

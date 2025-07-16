@@ -24,7 +24,7 @@ import shutil
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
-from tkinter import filedialog, Text, Menu
+from tkinter import filedialog, Text, Menu, Listbox, END, ACTIVE, Toplevel
 
 ROOT = Path(__file__).resolve().parents[2]
 # User data lives outside the repository in Documents/DAITK-Data
@@ -105,38 +105,304 @@ def rename_gameid(root: Path, new_id: str) -> None:
             path.rename(path.with_name(path.name.replace(placeholder, new_id)))
 
 
-class MiniIDE(ttk.Toplevel):
-    """Minimal IDE window with a VSCode-style layout."""
+def update_build_sha1(game_id: str = "GAMEID") -> None:
+    """Regenerate ``build.sha1`` for *game_id* based on extracted binaries."""
+    orig = TEMPLATE / "orig" / game_id
+    build_sha = TEMPLATE / "config" / game_id / "build.sha1"
+    if not orig.exists():
+        return
 
-    def __init__(self, master: ttk.Window, root_dir: Path = TEMPLATE) -> None:
+    lines: list[str] = []
+
+    main_dol = orig / "sys" / "main.dol"
+    if main_dol.exists():
+        lines.append(f"{sha1sum(main_dol)}  build/{game_id}/main.dol")
+
+    files = orig / "files"
+    if files.exists():
+        for rel in sorted(files.glob("*.rel")):
+            mod = rel.stem
+            lines.append(f"{sha1sum(rel)}  build/{game_id}/{mod}/{mod}.rel")
+
+    if lines:
+        build_sha.parent.mkdir(parents=True, exist_ok=True)
+        build_sha.write_text("\n".join(lines) + "\n")
+
+
+class Sidebar(ttk.Frame):
+    """Vertical sidebar with simple icon buttons."""
+
+    def __init__(self, master, callback) -> None:
+        super().__init__(master, width=40, padding=5, style="secondary.TFrame")
+        self.pack_propagate(False)
+        self.callback = callback
+        items = [
+            ("Explorer", "🗂"),
+            ("Search", "🔍"),
+            ("Source Control", "🌿"),
+        ]
+        for name, icon in items:
+            btn = ttk.Button(
+                self,
+                text=icon,
+                width=3,
+                bootstyle="toolbutton",
+                command=lambda n=name: self.callback(n),
+            )
+            btn.pack(pady=5)
+
+
+class EditorTabs(ttk.Frame):
+    """Tabbed editor with close buttons."""
+
+    def __init__(self, master) -> None:
         super().__init__(master)
-        self.title("DAITK IDE")
-        self.geometry("950x600")
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=BOTH, expand=YES)
+        self.notebook.bind("<Button-1>", self.on_click)
+        self.tabs: dict[Path, dict[str, object]] = {}
 
+    def on_click(self, event: object) -> None:
+        index = self.notebook.index(f"@{event.x},{event.y}")
+        if index < 0:
+            return
+        bbox = self.notebook.bbox(index)
+        if bbox and event.x > bbox[2] - 20:
+            tab_id = self.notebook.tabs()[index]
+            self.close_tab(tab_id)
+
+    def open_file(self, path: Path) -> None:
+        path = Path(path)
+        if path in self.tabs:
+            self.notebook.select(self.tabs[path]["frame"])
+            return
+        frame = ttk.Frame(self.notebook)
+        text = Text(frame, wrap="none", undo=True, font=("Consolas", 11))
+        text.pack(fill=BOTH, expand=YES)
+        try:
+            text.insert("1.0", path.read_text())
+        except Exception as exc:
+            Messagebox.show_error("Open failed", str(exc))
+            return
+        self.notebook.add(frame, text=f"{path.name} ✕")
+        self.tabs[path] = {"frame": frame, "text": text}
+        self.notebook.select(frame)
+
+    def close_tab(self, tab_id: str) -> None:
+        frame = self.notebook.nametowidget(tab_id)
+        self.notebook.forget(frame)
+        for p, tab in list(self.tabs.items()):
+            if tab["frame"] == frame:
+                del self.tabs[p]
+                break
+
+    def save_current(self) -> None:
+        tab = self.current_tab()
+        if tab is None:
+            return
+        path, d = tab
+        try:
+            path.write_text(d["text"].get("1.0", "end-1c"))
+        except Exception as exc:
+            Messagebox.show_error("Save failed", str(exc))
+
+    def current_tab(self) -> tuple[Path, dict[str, object]] | None:
+        current = self.notebook.select()
+        if not current:
+            return None
+        frame = self.notebook.nametowidget(current)
+        for p, d in self.tabs.items():
+            if d["frame"] == frame:
+                return p, d
+        return None
+
+
+class StatusBar(ttk.Frame):
+    """Simple status bar."""
+
+    def __init__(self, master) -> None:
+        super().__init__(master, style="secondary.TFrame")
+        self.var = ttk.StringVar(value="")
+        lbl = ttk.Label(self, textvariable=self.var, anchor=W)
+        lbl.pack(fill=X, padx=5)
+
+    def set(self, msg: str) -> None:
+        self.var.set(msg)
+
+
+class TerminalPanel(ttk.Frame):
+    """Bottom panel for log/terminal output."""
+
+    def __init__(self, master) -> None:
+        super().__init__(master)
+        self.text = Text(self, height=8, wrap="none", font=("Consolas", 10))
+        self.text.pack(fill=BOTH, expand=YES)
+        self.text.config(state="disabled")
+
+        self.entry = ttk.Entry(self)
+        self.entry.pack(fill=X)
+        self.entry.bind("<Return>", self.on_enter)
+        self.running = False
+
+    def write(self, msg: str) -> None:
+        self.text.config(state="normal")
+        self.text.insert(END, msg)
+        self.text.see(END)
+        self.text.config(state="disabled")
+
+    def on_enter(self, event: object) -> None:
+        cmd = self.entry.get().strip()
+        if cmd and not self.running:
+            self.entry.delete(0, END)
+            self.write(f"$ {cmd}\n")
+            threading.Thread(target=self.run_command, args=(cmd,), daemon=True).start()
+
+    def run_command(self, cmd: str) -> None:
+        self.running = True
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=TEMPLATE,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            assert proc.stdout
+            for line in proc.stdout:
+                self.after(0, lambda l=line: self.write(l))
+            proc.wait()
+        except Exception as exc:
+            self.after(0, lambda: self.write(f"Error: {exc}\n"))
+        finally:
+            self.running = False
+
+
+class CommandPalette(ttk.Toplevel):
+    """Basic command palette."""
+
+    def __init__(self, master, commands: dict[str, callable]) -> None:
+        super().__init__(master)
+        self.withdraw()
+        self.commands = commands
+        self.entry = ttk.Entry(self)
+        self.entry.pack(fill=X, padx=5, pady=5)
+        self.listbox = Listbox(self, height=5)
+        self.listbox.pack(fill=BOTH, expand=YES)
+        self.entry.bind("<KeyRelease>", self.on_change)
+        self.entry.bind("<Return>", lambda e: self.execute())
+        self.listbox.bind("<Double-1>", lambda e: self.execute())
+
+    def open(self) -> None:
+        self.update_list("")
+        self.entry.delete(0, END)
+        self.deiconify()
+        self.entry.focus_set()
+
+    def on_change(self, event: object) -> None:
+        self.update_list(self.entry.get())
+
+    def update_list(self, filter_text: str) -> None:
+        self.listbox.delete(0, END)
+        for name in self.commands:
+            if filter_text.lower() in name.lower():
+                self.listbox.insert(END, name)
+
+    def execute(self) -> None:
+        sel = self.listbox.get(ACTIVE)
+        if sel and sel in self.commands:
+            self.commands[sel]()
+        self.withdraw()
+
+
+class TourGuide(Toplevel):
+    """Simple tour guiding the user through initial files."""
+
+    def __init__(self, master: "Stage1GUI") -> None:
+        super().__init__(master)
+        self.master = master
+        self.steps = [
+            (TEMPLATE / "config" / "GAMEID" / "config.yml", "Edit paths and compiler options in config.yml."),
+            (TEMPLATE / "config" / "GAMEID" / "build.sha1", "Hashes for main.dol and RELs live in build.sha1."),
+            (CONFIGURE, "configure.py generates build files. Run it after editing."),
+        ]
+        self.index = 0
+        self.resizable(False, False)
+        self.title("Welcome Tour")
+
+        self.label = ttk.Label(self, wraplength=360, justify=LEFT)
+        self.label.pack(padx=15, pady=15)
+
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=(0, 15))
+        ttk.Button(btn_frame, text="Previous", command=self.prev).pack(side=LEFT, padx=5)
+        ttk.Button(btn_frame, text="Next", command=self.next).pack(side=LEFT, padx=5)
+
+        self.update_step()
+
+    def update_step(self) -> None:
+        path, msg = self.steps[self.index]
+        self.master.show_ide()
+        self.master.ide.open_file(path)
+        self.label.configure(text=msg)
+
+    def prev(self) -> None:
+        if self.index > 0:
+            self.index -= 1
+            self.update_step()
+
+    def next(self) -> None:
+        self.index += 1
+        if self.index >= len(self.steps):
+            self.destroy()
+        else:
+            self.update_step()
+
+
+class MiniIDE(ttk.Frame):
+    """Minimal IDE attached to the main window."""
+
+    def __init__(self, master: ttk.Frame, root_dir: Path = TEMPLATE) -> None:
+        super().__init__(master)
         self.root_dir = root_dir
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
 
-        paned = ttk.PanedWindow(self, orient=HORIZONTAL)
-        paned.pack(fill=BOTH, expand=YES)
+        self.sidebar = Sidebar(self, lambda n: None)
+        self.sidebar.grid(row=0, column=0, sticky=NS)
 
-        sidebar = ttk.Frame(paned, width=200)
-        paned.add(sidebar, weight=0)
+        main_pane = ttk.PanedWindow(self, orient=VERTICAL)
+        main_pane.grid(row=0, column=1, sticky=NSEW)
 
-        self.tree = ttk.Treeview(sidebar, show="tree")
-        self.tree.pack(fill=BOTH, expand=YES)
+        edit_frame = ttk.Frame(main_pane)
+        edit_frame.columnconfigure(1, weight=1)
+        edit_frame.rowconfigure(0, weight=1)
+        main_pane.add(edit_frame, weight=3)
+
+        self.tree = ttk.Treeview(edit_frame, show="tree")
+        self.tree.grid(row=0, column=0, sticky=NS)
         self.tree.bind("<<TreeviewOpen>>", self.on_tree_open)
         self.tree.bind("<Double-1>", self.on_tree_double)
 
-        self.notebook = ttk.Notebook(paned)
-        paned.add(self.notebook, weight=1)
+        self.editor = EditorTabs(edit_frame)
+        self.editor.grid(row=0, column=1, sticky=NSEW)
 
-        self.tabs: dict[Path, tuple[ttk.Frame, Text]] = {}
+        self.terminal = TerminalPanel(main_pane)
+        main_pane.add(self.terminal, weight=1)
 
-        menubar = Menu(self)
-        file_menu = Menu(menubar, tearoff=False)
-        file_menu.add_command(label="Open…", command=self.open_dialog)
-        file_menu.add_command(label="Save", command=self.save_current)
-        menubar.add_cascade(label="File", menu=file_menu)
-        self.config(menu=menubar)
+        self.status = StatusBar(self)
+        self.status.grid(row=1, column=0, columnspan=2, sticky=EW)
+
+        self.palette = CommandPalette(
+            self,
+            {
+                "Open File": self.open_dialog,
+                "Save File": self.save_current,
+            },
+        )
+
+        accel = "<Command-Shift-P>" if sys.platform == "darwin" else "<Control-Shift-P>"
+        self.bind_all(accel, lambda e: self.palette.open())
 
         self.populate_root()
 
@@ -150,7 +416,6 @@ class MiniIDE(ttk.Toplevel):
             iid = str(child)
             if child.is_dir():
                 node = self.tree.insert(parent, "end", iid=iid, text=child.name)
-                # placeholder child for expandable indicator
                 if any(child.iterdir()):
                     self.tree.insert(node, "end")
             else:
@@ -159,7 +424,6 @@ class MiniIDE(ttk.Toplevel):
     def on_tree_open(self, event: object) -> None:
         node = self.tree.focus()
         path = Path(node)
-        # populate directory if not yet expanded
         children = self.tree.get_children(node)
         if len(children) == 1 and not self.tree.item(children[0], "text"):
             self.tree.delete(children[0])
@@ -177,52 +441,32 @@ class MiniIDE(ttk.Toplevel):
             self.open_file(Path(path))
 
     def open_file(self, path: Path) -> None:
-        if path in self.tabs:
-            frame, _ = self.tabs[path]
-            self.notebook.select(frame)
-            return
+        self.editor.open_file(path)
 
-        frame = ttk.Frame(self.notebook)
-        text = Text(frame, wrap="none", undo=True)
-        text.pack(fill=BOTH, expand=YES)
 
-        try:
-            text.insert("1.0", path.read_text())
-        except Exception as exc:
-            Messagebox.show_error("Open failed", str(exc))
-            return
-
-        self.notebook.add(frame, text=path.name)
-        self.tabs[path] = (frame, text)
-        self.notebook.select(frame)
-
-    def save_current(self) -> None:
-        current = self.notebook.select()
-        if not current:
-            return
-        frame = self.notebook.nametowidget(current)
-        for path, (fr, text) in self.tabs.items():
-            if fr == frame:
-                try:
-                    path.write_text(text.get("1.0", "end-1c"))
-                    self.title(f"DAITK IDE – {path.name} saved")
-                except Exception as exc:
-                    Messagebox.show_error("Save failed", str(exc))
 
 class Stage1GUI(ttk.Window):
     def __init__(self) -> None:
-        super().__init__(title="Stage 1 Launcher", themename="darkly", size=(500, 320))
+        super().__init__(title="Stage 1 Launcher", themename="darkly", size=(1000, 700))
         ensure_template()
 
         self.iso_path = ttk.StringVar()
         self.game_id = ttk.StringVar()
         self.dtk_path = ttk.StringVar(value="dtk")
-        self.status = ttk.StringVar()
-        self.ide: MiniIDE | None = None
+        self.status_var = ttk.StringVar()
 
-        container = ttk.Frame(self, padding=15)
-        container.pack(fill=BOTH, expand=YES)
+        # Use a horizontal layout so the IDE can appear to the right
+        self.paned = ttk.PanedWindow(self, orient=HORIZONTAL)
+        self.paned.pack(fill=BOTH, expand=YES)
+
+        container = ttk.Frame(self.paned, padding=15)
+        self.paned.add(container, weight=0)
         container.columnconfigure(1, weight=1)
+
+        self.ide = MiniIDE(self.paned, TEMPLATE)
+        # start hidden
+        self.paned.add(self.ide, weight=1)
+        self.paned.forget(self.ide)
 
         ttk.Label(container, text="Game ISO:").grid(row=0, column=0, sticky=W, pady=5)
         ttk.Entry(container, textvariable=self.iso_path).grid(row=0, column=1, sticky=EW, padx=(0, 5))
@@ -240,22 +484,17 @@ class Stage1GUI(ttk.Window):
         ttk.Button(container, text="Run Stage 1", command=self.run_stage1, bootstyle="primary")\
             .grid(row=3, column=0, columnspan=3, pady=10)
 
-        edit_frame = ttk.Frame(container)
-        edit_frame.grid(row=4, column=0, columnspan=3, pady=5)
-        ttk.Button(edit_frame, text="Edit config.yml", command=self.edit_config, bootstyle="light")\
-            .pack(side=LEFT, padx=5)
-        ttk.Button(edit_frame, text="Edit build.sha1", command=self.edit_sha1, bootstyle="light")\
-            .pack(side=LEFT, padx=5)
-        ttk.Button(edit_frame, text="Edit configure.py", command=self.edit_configure, bootstyle="light")\
-            .pack(side=LEFT, padx=5)
         ttk.Button(container, text="Open IDE", command=self.show_ide, bootstyle="secondary")\
-            .grid(row=5, column=0, columnspan=3)
+            .grid(row=4, column=0, columnspan=3)
 
         ttk.Button(container, text="Run configure.py", command=self.run_configure, bootstyle="primary")\
-            .grid(row=6, column=0, columnspan=3, pady=10)
+            .grid(row=5, column=0, columnspan=3, pady=10)
 
-        ttk.Label(container, textvariable=self.status, foreground="cyan")\
-            .grid(row=7, column=0, columnspan=3, sticky=W)
+        ttk.Label(container, textvariable=self.status_var, foreground="cyan")\
+            .grid(row=6, column=0, columnspan=3, sticky=W)
+
+        # show an initial tour after the window appears
+        self.after(1000, lambda: TourGuide(self))
 
     def select_iso(self) -> None:
         path = filedialog.askopenfilename(title="Select Wii ISO or WBFS", filetypes=[("Wii ISO/WBFS", "*.iso *.wbfs"), ("All files", "*")])
@@ -276,7 +515,7 @@ class Stage1GUI(ttk.Window):
             Messagebox.show_error("Error", "Invalid ISO/WBFS path")
             return
 
-        self.status.set("Extracting…")
+        self.status_var.set("Extracting…")
         self.rename_btn.config(state="disabled")
 
         def task() -> None:
@@ -311,14 +550,15 @@ class Stage1GUI(ttk.Window):
                 main_dol = ORIG_DIR / "sys" / "main.dol"
                 if main_dol.exists():
                     sha1 = sha1sum(main_dol)
+                update_build_sha1("GAMEID")
 
             def finish() -> None:
                 if sha1:
-                    self.status.set(f"Extraction complete\nmain.dol sha1: {sha1}")
+                    self.status_var.set(f"Extraction complete\nmain.dol sha1: {sha1}")
                 elif any(ORIG_DIR.iterdir()):
-                    self.status.set("Extraction complete")
+                    self.status_var.set("Extraction complete")
                 else:
-                    self.status.set("Extraction produced no files")
+                    self.status_var.set("Extraction produced no files")
                 self.rename_btn.config(state="normal")
 
             self.after(0, finish)
@@ -326,11 +566,9 @@ class Stage1GUI(ttk.Window):
         threading.Thread(target=task, daemon=True).start()
 
     def show_ide(self) -> None:
-        if self.ide is None or not self.ide.winfo_exists():
-            self.ide = MiniIDE(self, TEMPLATE)
-        else:
-            self.ide.deiconify()
-            self.ide.lift()
+        panes = self.paned.panes()
+        if str(self.ide) not in panes:
+            self.paned.add(self.ide, weight=1)
 
     def rename_gameid(self) -> None:
         new_id = self.game_id.get().strip().upper()
@@ -338,15 +576,16 @@ class Stage1GUI(ttk.Window):
             Messagebox.show_error("Error", "Enter a Game ID")
             return
 
-        self.status.set("Renaming…")
+        self.status_var.set("Renaming…")
 
         def task() -> None:
             try:
                 rename_gameid(TEMPLATE, new_id)
+                update_build_sha1(new_id)
             except Exception as exc:
                 self.after(0, lambda: Messagebox.show_error("Rename failed", str(exc)))
                 return
-            self.after(0, lambda: self.status.set(f"Renamed to {new_id}"))
+            self.after(0, lambda: self.status_var.set(f"Renamed to {new_id}"))
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -361,7 +600,7 @@ class Stage1GUI(ttk.Window):
             self.dtk_path.get(),
         ]
 
-        self.status.set("Running Stage 1…")
+        self.status_var.set("Running Stage 1…")
 
         def task() -> None:
             try:
@@ -369,7 +608,7 @@ class Stage1GUI(ttk.Window):
             except subprocess.CalledProcessError as exc:
                 self.after(0, lambda: Messagebox.show_error("Stage 1 failed", str(exc)))
                 return
-            self.after(0, lambda: self.status.set("Stage 1 completed"))
+            self.after(0, lambda: self.status_var.set("Stage 1 completed"))
 
         threading.Thread(target=task, daemon=True).start()
 
@@ -380,8 +619,7 @@ class Stage1GUI(ttk.Window):
             open_file(path)
         else:
             self.show_ide()
-            if self.ide:
-                self.ide.open_file(path)
+            self.ide.open_file(path)
 
     def edit_sha1(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
@@ -390,16 +628,14 @@ class Stage1GUI(ttk.Window):
             open_file(path)
         else:
             self.show_ide()
-            if self.ide:
-                self.ide.open_file(path)
+            self.ide.open_file(path)
 
     def edit_configure(self) -> None:
         if os.environ.get("EDITOR") or os.environ.get("VISUAL"):
             open_file(CONFIGURE)
         else:
             self.show_ide()
-            if self.ide:
-                self.ide.open_file(CONFIGURE)
+            self.ide.open_file(CONFIGURE)
 
     def run_configure(self) -> None:
         game_id = self.game_id.get().strip().upper() or "GAMEID"
@@ -410,7 +646,7 @@ class Stage1GUI(ttk.Window):
                 "--version",
                 game_id,
             ], cwd=TEMPLATE, check=True)
-            self.status.set("configure.py completed")
+            self.status_var.set("configure.py completed")
         except subprocess.CalledProcessError as exc:
             Messagebox.show_error("configure.py failed", str(exc))
 
