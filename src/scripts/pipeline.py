@@ -30,7 +30,7 @@ def main():
 
 
 if __name__ == "__main__":
-    os.makedirs(RECOMP_OBJ_DIR, parents=True, exist_ok=True)
-    os.makedirs(SRC_DIR, parents=True, exist_ok=True)
-    os.makedirs(LOG_DIR, parents=True, exist_ok=True)
+    RECOMP_OBJ_DIR.mkdir(parents=True, exist_ok=True)
+    SRC_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     main()

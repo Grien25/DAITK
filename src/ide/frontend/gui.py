@@ -31,6 +31,7 @@ TEMPLATE = DATA_ROOT / "dtk-template"
 WBFS_DIR = TEMPLATE / "WBFS"
 ORIG_DIR = TEMPLATE / "orig" / "GAMEID"
 STAGE1 = ROOT / "src" / "scripts" / "stage1.py"
+CONFIGURE = TEMPLATE / "configure.py"
 
 
 def open_file(path: Path) -> None:
@@ -117,6 +118,8 @@ class Stage1GUI(tk.Tk):
         edit_frame.pack(pady=5)
         tk.Button(edit_frame, text="Edit config.yml", command=self.edit_config).pack(side="left", padx=5)
         tk.Button(edit_frame, text="Edit build.sha1", command=self.edit_sha1).pack(side="left", padx=5)
+
+        tk.Button(self, text="Run configure.py", command=self.run_configure).pack(pady=5)
 
         tk.Label(self, textvariable=self.status, fg="blue").pack(padx=10)
 
@@ -207,6 +210,19 @@ class Stage1GUI(tk.Tk):
         game_id = self.game_id.get().strip().upper() or "GAMEID"
         path = TEMPLATE / "config" / game_id / "build.sha1"
         open_file(path)
+
+    def run_configure(self) -> None:
+        game_id = self.game_id.get().strip().upper() or "GAMEID"
+        try:
+            subprocess.run([
+                "python3",
+                str(CONFIGURE),
+                "--version",
+                game_id,
+            ], cwd=TEMPLATE, check=True)
+            self.status.set("configure.py completed")
+        except subprocess.CalledProcessError as exc:
+            messagebox.showerror("configure.py failed", str(exc))
 
 
 if __name__ == "__main__":
