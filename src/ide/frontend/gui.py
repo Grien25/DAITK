@@ -76,14 +76,14 @@ class Stage1GUI(tk.Tk):
         tk.Label(self, textvariable=self.status, fg="blue").pack(padx=10)
 
     def select_iso(self) -> None:
-        path = filedialog.askopenfilename(title="Select Wii ISO", filetypes=[("Wii ISO", "*.iso"), ("All files", "*")])
+        path = filedialog.askopenfilename(title="Select Wii ISO or WBFS", filetypes=[("Wii ISO/WBFS", "*.iso *.wbfs"), ("All files", "*")])
         if path:
             self.iso_path.set(path)
 
     def extract_iso(self) -> None:
         iso = Path(self.iso_path.get())
         if not iso.is_file():
-            messagebox.showerror("Error", "Invalid ISO path")
+            messagebox.showerror("Error", "Invalid ISO/WBFS path")
             return
         WBFS_DIR.mkdir(parents=True, exist_ok=True)
         dest_iso = WBFS_DIR / iso.name
@@ -93,11 +93,15 @@ class Stage1GUI(tk.Tk):
             messagebox.showerror("Copy failed", str(exc))
             return
         ORIG_DIR.mkdir(parents=True, exist_ok=True)
-        cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
+        if dest_iso.suffix.lower() == ".wbfs":
+            # Extract the full filesystem (main.dol, .rel, etc. will be present in output)
+            cmd = ["wit", "extract", "--overwrite", str(dest_iso), str(ORIG_DIR)]
+        else:
+            cmd = ["wwt", "extract", str(dest_iso), "--dest", str(ORIG_DIR)]
         try:
             subprocess.run(cmd, check=True)
         except FileNotFoundError:
-            messagebox.showerror("wwt not found", "Install Wiimms WBFS Tool and ensure 'wwt' is in PATH")
+            messagebox.showerror("Tool not found", "Install Wiimms ISO Tools and ensure 'wit' and 'wwt' are in PATH")
             return
         except subprocess.CalledProcessError as exc:
             messagebox.showerror("Extraction failed", str(exc))
