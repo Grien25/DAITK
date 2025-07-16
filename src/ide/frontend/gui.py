@@ -106,15 +106,28 @@ def rename_gameid(root: Path, new_id: str) -> None:
 
 
 class MiniIDE(ttk.Toplevel):
-    """Very small text editor window as a lightweight VSCode-like IDE."""
+    """Minimal IDE window with a VSCode-style layout."""
 
-    def __init__(self, master: ttk.Window) -> None:
+    def __init__(self, master: ttk.Window, root_dir: Path = TEMPLATE) -> None:
         super().__init__(master)
         self.title("DAITK IDE")
-        self.geometry("800x600")
+        self.geometry("950x600")
 
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=BOTH, expand=YES)
+        self.root_dir = root_dir
+
+        paned = ttk.PanedWindow(self, orient=HORIZONTAL)
+        paned.pack(fill=BOTH, expand=YES)
+
+        sidebar = ttk.Frame(paned, width=200)
+        paned.add(sidebar, weight=0)
+
+        self.tree = ttk.Treeview(sidebar, show="tree")
+        self.tree.pack(fill=BOTH, expand=YES)
+        self.tree.bind("<<TreeviewOpen>>", self.on_tree_open)
+        self.tree.bind("<Double-1>", self.on_tree_double)
+
+        self.notebook = ttk.Notebook(paned)
+        paned.add(self.notebook, weight=1)
 
         self.tabs: dict[Path, tuple[ttk.Frame, Text]] = {}
 
@@ -124,6 +137,39 @@ class MiniIDE(ttk.Toplevel):
         file_menu.add_command(label="Save", command=self.save_current)
         menubar.add_cascade(label="File", menu=file_menu)
         self.config(menu=menubar)
+
+        self.populate_root()
+
+    def populate_root(self) -> None:
+        self.tree.delete(*self.tree.get_children(""))
+        node = self.tree.insert("", "end", iid=str(self.root_dir), text=self.root_dir.name, open=True)
+        self.populate_tree(node, self.root_dir)
+
+    def populate_tree(self, parent: str, path: Path) -> None:
+        for child in sorted(path.iterdir()):
+            iid = str(child)
+            if child.is_dir():
+                node = self.tree.insert(parent, "end", iid=iid, text=child.name)
+                # placeholder child for expandable indicator
+                if any(child.iterdir()):
+                    self.tree.insert(node, "end")
+            else:
+                self.tree.insert(parent, "end", iid=iid, text=child.name)
+
+    def on_tree_open(self, event: object) -> None:
+        node = self.tree.focus()
+        path = Path(node)
+        # populate directory if not yet expanded
+        children = self.tree.get_children(node)
+        if len(children) == 1 and not self.tree.item(children[0], "text"):
+            self.tree.delete(children[0])
+            self.populate_tree(node, path)
+
+    def on_tree_double(self, event: object) -> None:
+        item = self.tree.focus()
+        path = Path(item)
+        if path.is_file():
+            self.open_file(path)
 
     def open_dialog(self) -> None:
         path = filedialog.askopenfilename()
@@ -165,7 +211,7 @@ class MiniIDE(ttk.Toplevel):
 
 class Stage1GUI(ttk.Window):
     def __init__(self) -> None:
-        super().__init__(title="Stage 1 Launcher", themename="flatly", size=(500, 320))
+        super().__init__(title="Stage 1 Launcher", themename="darkly", size=(500, 320))
         ensure_template()
 
         self.iso_path = ttk.StringVar()
@@ -208,7 +254,7 @@ class Stage1GUI(ttk.Window):
         ttk.Button(container, text="Run configure.py", command=self.run_configure, bootstyle="primary")\
             .grid(row=6, column=0, columnspan=3, pady=10)
 
-        ttk.Label(container, textvariable=self.status, foreground="blue")\
+        ttk.Label(container, textvariable=self.status, foreground="cyan")\
             .grid(row=7, column=0, columnspan=3, sticky=W)
 
     def select_iso(self) -> None:
@@ -281,7 +327,7 @@ class Stage1GUI(ttk.Window):
 
     def show_ide(self) -> None:
         if self.ide is None or not self.ide.winfo_exists():
-            self.ide = MiniIDE(self)
+            self.ide = MiniIDE(self, TEMPLATE)
         else:
             self.ide.deiconify()
             self.ide.lift()
