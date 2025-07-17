@@ -77,7 +77,7 @@ Once the assembly files are produced, you can browse them with a small GUI:
 python3 scripts/function_browser.py
 ```
 
-Select your `asm/` folder to list all `.s` files. The selected file's functions appear in a second table. Double-click a function to view its assembly in a separate window.
+Select your `asm/` folder to list all `.s` files. The browser scans in a background thread and shows a small progress bar while loading. The selected file's functions appear in a second table. Double-click a function to view its assembly in a separate window.
 
 ## Prompt Templates
 

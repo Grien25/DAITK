@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 from tkinter.scrolledtext import ScrolledText
 from pathlib import Path
+from threading import Thread
+from queue import Queue, Empty
 
 
 def parse_functions(path: Path):
@@ -34,6 +36,7 @@ class FunctionBrowser(tk.Tk):
         self.filter_var = tk.StringVar()
         self.functions = []
         self.lines = []
+        self.queue: Queue = Queue()
 
         top_frame = ttk.Frame(self)
         top_frame.pack(fill=tk.X, pady=5, padx=5)
@@ -45,7 +48,7 @@ class FunctionBrowser(tk.Tk):
         ttk.Label(filter_frame, text="Filter:").pack(side=tk.LEFT)
         filter_entry = ttk.Entry(filter_frame, textvariable=self.filter_var)
         filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        filter_entry.bind("<KeyRelease>", lambda e: self.update_file_list())
+        filter_entry.bind("<KeyRelease>", lambda e: self.start_file_scan())
 
         body = ttk.Frame(self)
         body.pack(fill=tk.BOTH, expand=True)
@@ -65,24 +68,40 @@ class FunctionBrowser(tk.Tk):
         self.func_tree.pack(fill=tk.BOTH, expand=True)
         self.func_tree.bind("<Double-1>", self.open_function)
 
+        # Progress indicator at the bottom
+        self.progress = ttk.Label(self, text="")
+        self.progress.pack(fill=tk.X, side=tk.BOTTOM)
+        self.progress_bar = ttk.Progressbar(self, mode="indeterminate")
+
+        # Periodically process queued results from background threads
+        self.after(100, self.process_queue)
+
     def select_folder(self):
         path = filedialog.askdirectory()
         if path:
             self.directory.set(path)
-            self.update_file_list()
+            self.start_file_scan()
 
-    def update_file_list(self):
+    def start_file_scan(self):
+        """Scan selected folder in a background thread."""
         self.files_tree.delete(*self.files_tree.get_children())
         self.func_tree.delete(*self.func_tree.get_children())
         folder = Path(self.directory.get())
-        filt = self.filter_var.get().lower()
         if not folder.is_dir():
             return
+        self.progress.config(text="Scanning files...")
+        self.progress_bar.pack(fill=tk.X, side=tk.BOTTOM)
+        self.progress_bar.start()
+        Thread(target=self._scan_files, args=(folder, self.filter_var.get().lower()), daemon=True).start()
+
+    def _scan_files(self, folder: Path, filt: str):
+        files = []
         for f in sorted(folder.glob("*.s")):
             name = f.name
             if filt and filt not in name.lower():
                 continue
-            self.files_tree.insert("", tk.END, values=(name,))
+            files.append(name)
+        self.queue.put(("files", files))
 
     def on_file_select(self, _event=None):
         sel = self.files_tree.selection()
@@ -90,10 +109,14 @@ class FunctionBrowser(tk.Tk):
             return
         filename = self.files_tree.item(sel[0], "values")[0]
         file_path = Path(self.directory.get()) / filename
-        self.functions, self.lines = parse_functions(file_path)
-        self.func_tree.delete(*self.func_tree.get_children())
-        for i, (name, _s, _e) in enumerate(self.functions):
-            self.func_tree.insert("", tk.END, iid=str(i), values=(name,))
+        self.progress.config(text="Parsing functions...")
+        self.progress_bar.pack(fill=tk.X, side=tk.BOTTOM)
+        self.progress_bar.start()
+        Thread(target=self._parse_file, args=(file_path,), daemon=True).start()
+
+    def _parse_file(self, file_path: Path):
+        funcs, lines = parse_functions(file_path)
+        self.queue.put(("functions", (funcs, lines)))
 
     def open_function(self, _event=None):
         sel = self.func_tree.selection()
@@ -109,6 +132,38 @@ class FunctionBrowser(tk.Tk):
         text.pack(fill=tk.BOTH, expand=True)
         text.insert("1.0", asm_text)
         text.configure(state="disabled")
+
+    def process_queue(self):
+        """Handle results from worker threads."""
+        try:
+            while True:
+                msg, data = self.queue.get_nowait()
+                if msg == "files":
+                    self._update_files(data)
+                elif msg == "functions":
+                    self._update_functions(*data)
+        except Empty:
+            pass
+        finally:
+            self.after(100, self.process_queue)
+
+    def _update_files(self, files):
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.progress.config(text="")
+        self.files_tree.delete(*self.files_tree.get_children())
+        for name in files:
+            self.files_tree.insert("", tk.END, values=(name,))
+
+    def _update_functions(self, funcs, lines):
+        self.progress_bar.stop()
+        self.progress_bar.pack_forget()
+        self.progress.config(text="")
+        self.functions = funcs
+        self.lines = lines
+        self.func_tree.delete(*self.func_tree.get_children())
+        for i, (name, _s, _e) in enumerate(funcs):
+            self.func_tree.insert("", tk.END, iid=str(i), values=(name,))
 
 if __name__ == "__main__":
     FunctionBrowser().mainloop()
