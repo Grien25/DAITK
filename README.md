@@ -60,20 +60,23 @@ Each function from the binary is decompiled and recompiled individually. A verif
 2. Obtain and set up MWCC compiler
 3. Install `objdiff-cli`
 4. Set up LLM (local or API)
-5. Create directory structure:
+5. Create a working directory structure:
 
 ```
-project/
-├── asm/ (DTK output)
-├── orig_obj/ (original objects)
-├── recomp_obj/ (recompiled objects)
-├── src/ (AI-generated C)
-├── logs/ (diff/build logs)
-├── scripts/ (automation scripts)
-└── ide/ (prototype GUI)
+asm/         (DTK output)
+orig_obj/    (original objects)
+recomp_obj/  (recompiled objects)
+src/         (AI-generated C)
+logs/        (diff/build logs)
 ```
 
-Use `scripts/stage1.py` or GUI (`ide/frontend/gui.py`) to extract and populate initial files.
+Once the assembly files are produced, you can browse them using a responsive Tkinter GUI:
+
+```bash
+python3 src/function_browser.py
+```
+
+Select your `asm/` folder and click **Scan**. Files are scanned in a background thread while a small progress bar spins. The left table lists `.s` files and the right table shows functions from the selected file. Choose a function and click **Open** to view its assembly (double-click works too).
 
 ## Prompt Templates
 
@@ -178,14 +181,11 @@ print(summary)
 ## Directory Summary
 
 ```
-project/
-├── asm/
-├── orig_obj/
-├── recomp_obj/
-├── src/
-├── logs/
-├── scripts/
-└── ide/
+asm/
+orig_obj/
+recomp_obj/
+src/
+logs/
 ```
 
 This structured pipeline enables robust and verified assembly-to-C decompilation leveraging automated AI-assisted tools and detailed verification processes.
