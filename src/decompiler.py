@@ -1,8 +1,8 @@
 from assembly_parser import extract_functions_from_asm
 from llm_interface import get_llm
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-def decompile_asm_file(file_path: str, llm_backend: str, llm_kwargs: dict = None) -> List[Dict]:
+def decompile_asm_file(file_path: str, llm_backend: str, llm_kwargs: Optional[Dict] = None) -> List[Dict]:
     """
     Loads a .s file, extracts functions, sends each to the LLM, and returns decompiled results.
     Returns a list of dicts: { 'name': str, 'asm_code': str, 'decompiled_code': str, 'start_line': int, 'end_line': int }
