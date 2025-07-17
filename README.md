@@ -70,13 +70,13 @@ src/         (AI-generated C)
 logs/        (diff/build logs)
 ```
 
-Once the assembly files are produced, you can browse them using a simple Tkinter GUI:
+Once the assembly files are produced, you can browse them using a responsive Tkinter GUI:
 
 ```bash
 python3 src/function_browser.py
 ```
 
-Select your `asm/` folder and click **Scan**. The left table lists `.s` files while the right table shows functions from the selected file. Double-click a function to view its assembly in a separate window.
+Select your `asm/` folder and click **Scan**. Files are scanned in a background thread while a small progress bar spins. The left table lists `.s` files and the right table shows functions from the selected file. Double-click a function to view its assembly in a separate window.
 
 ## Prompt Templates
 

@@ -4,7 +4,7 @@ This document outlines the incremental steps for building the AI-assisted decomp
 
 ## Stage 1 – Setup
 - Use `decomp-toolkit` to split your binary and produce `.s` files.
-- Run `python3 src/function_browser.py` to explore the `asm/` folder with a Tkinter browser. The left table lists `.s` files and the right table shows functions from the selected file. Double-click a function to view its assembly in a pop-up.
+- Run `python3 src/function_browser.py` to explore the `asm/` folder with a Tkinter browser. Scanning and parsing happens in the background with a progress bar so the UI remains responsive. The left table lists `.s` files and the right table shows functions from the selected file. Double-click a function to view its assembly in a pop-up.
 - Create empty `recomp_obj/`, `src/`, and `logs/` folders for later stages.
 
 ## Stage 2 – Automated Decompilation

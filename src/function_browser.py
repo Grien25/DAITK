@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import queue
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, scrolledtext
@@ -50,8 +51,8 @@ class Browser(tk.Tk):
         tk.Entry(filt, textvariable=self.filter_var).pack(side='left', fill='x', expand=True)
         tk.Button(filt, text="Apply", command=self.scan).pack(side='left', padx=2)
 
-        self.progress = tk.Label(self, text="")
-        self.progress.pack(pady=2)
+        self.progress = ttk.Progressbar(self, mode="indeterminate")
+        self.progress.pack(fill="x", padx=5, pady=5)
 
         lists = tk.Frame(self)
         lists.pack(fill='both', expand=True, padx=5, pady=5)
@@ -68,6 +69,8 @@ class Browser(tk.Tk):
 
         self.functions = []
         self.lines = []
+        self.queue = queue.Queue()
+        self.after(100, self._process_queue)
 
     def browse(self):
         path = filedialog.askdirectory()
@@ -79,13 +82,13 @@ class Browser(tk.Tk):
         if not folder.is_dir():
             messagebox.showerror("Error", "Invalid folder")
             return
-        self.progress.config(text="Scanning...")
-        thread = threading.Thread(target=self._scan_files, args=(folder, self.filter_var.get().lower()))
+        self.progress.start()
+        thread = threading.Thread(target=self._scan_files, args=(folder, self.filter_var.get().lower()), daemon=True)
         thread.start()
 
     def _scan_files(self, folder: Path, filt: str):
         files = [f.name for f in sorted(folder.glob('*.s')) if not filt or filt in f.name.lower()]
-        self.after(0, self._update_file_list, files)
+        self.queue.put(("files", files))
 
     def _update_file_list(self, files):
         for item in self.file_list.get_children():
@@ -96,7 +99,7 @@ class Browser(tk.Tk):
             self.func_list.delete(item)
         self.functions = []
         self.lines = []
-        self.progress.config(text="")
+        self.progress.stop()
 
     def load_file(self, event=None):
         sel = self.file_list.selection()
@@ -104,12 +107,12 @@ class Browser(tk.Tk):
             return
         filename = self.file_list.item(sel[0])['values'][0]
         file_path = Path(self.folder_var.get()) / filename
-        self.progress.config(text="Parsing...")
-        threading.Thread(target=self._parse_file, args=(file_path,)).start()
+        self.progress.start()
+        threading.Thread(target=self._parse_file, args=(file_path,), daemon=True).start()
 
     def _parse_file(self, path: Path):
         funcs, lines = parse_functions(path)
-        self.after(0, self._update_func_list, funcs, lines)
+        self.queue.put(("funcs", funcs, lines))
 
     def _update_func_list(self, funcs, lines):
         for item in self.func_list.get_children():
@@ -118,7 +121,20 @@ class Browser(tk.Tk):
             self.func_list.insert('', 'end', iid=str(i), values=(name,))
         self.functions = funcs
         self.lines = lines
-        self.progress.config(text="")
+        self.progress.stop()
+
+    def _process_queue(self):
+        try:
+            while True:
+                msg = self.queue.get_nowait()
+                if msg[0] == "files":
+                    self._update_file_list(msg[1])
+                elif msg[0] == "funcs":
+                    self._update_func_list(msg[1], msg[2])
+        except queue.Empty:
+            pass
+        finally:
+            self.after(100, self._process_queue)
 
     def show_function(self, event=None):
         sel = self.func_list.selection()
