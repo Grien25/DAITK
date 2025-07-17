@@ -76,7 +76,7 @@ Once the assembly files are produced, you can browse them using a responsive Tki
 python3 src/function_browser.py
 ```
 
-Select your `asm/` folder and click **Scan**. Files are scanned in a background thread while a small progress bar spins. The left table lists `.s` files and the right table shows functions from the selected file. Double-click a function to view its assembly in a separate window.
+Select your `asm/` folder and click **Scan**. Files are scanned in a background thread while a small progress bar spins. The left table lists `.s` files and the right table shows functions from the selected file. Choose a function and click **Open** to view its assembly (double-click works too).
 
 ## Prompt Templates
 

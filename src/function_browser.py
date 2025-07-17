@@ -62,10 +62,19 @@ class Browser(tk.Tk):
         self.file_list.pack(side='left', fill='both', expand=True)
         self.file_list.bind('<<TreeviewSelect>>', self.load_file)
 
-        self.func_list = ttk.Treeview(lists, columns=("func",), show='headings', selectmode='browse')
+        func_frame = tk.Frame(lists)
+        func_frame.pack(side='left', fill='both', expand=True)
+        func_frame.rowconfigure(0, weight=1)
+        func_frame.columnconfigure(0, weight=1)
+
+        self.func_list = ttk.Treeview(func_frame, columns=("func",), show='headings', selectmode='browse')
         self.func_list.heading('func', text='Function')
-        self.func_list.pack(side='left', fill='both', expand=True)
+        self.func_list.grid(row=0, column=0, sticky='nsew')
+        self.func_list.bind('<<TreeviewSelect>>', self._on_func_select)
         self.func_list.bind('<Double-1>', self.show_function)
+
+        self.open_btn = tk.Button(func_frame, text="Open", command=self.show_function, state='disabled')
+        self.open_btn.grid(row=0, column=1, padx=5, sticky='ns')
 
         self.functions = []
         self.lines = []
@@ -122,6 +131,11 @@ class Browser(tk.Tk):
         self.functions = funcs
         self.lines = lines
         self.progress.stop()
+        self.open_btn.config(state='disabled')
+
+    def _on_func_select(self, event=None):
+        sel = self.func_list.selection()
+        self.open_btn.config(state='normal' if sel else 'disabled')
 
     def _process_queue(self):
         try:
