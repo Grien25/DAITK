@@ -71,13 +71,13 @@ logs/        (diff/build logs)
 scripts/     (automation scripts)
 ```
 
-Once the assembly files are produced, you can browse them with a simple GUI:
+Once the assembly files are produced, you can browse them with a small GUI:
 
 ```
 python3 scripts/function_browser.py
 ```
 
-Select your `asm/` folder and filter the `.s` files in the table.
+Select your `asm/` folder to list all `.s` files. The selected file's functions appear in a second table. Double-click a function to view its assembly in a separate window.
 
 ## Prompt Templates
 
