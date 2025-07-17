@@ -69,11 +69,10 @@ project/
 ├── recomp_obj/ (recompiled objects)
 ├── src/ (AI-generated C)
 ├── logs/ (diff/build logs)
-├── scripts/ (automation scripts)
-└── ide/ (prototype GUI)
+└── scripts/ (automation scripts)
 ```
 
-Use `scripts/stage1.py` or GUI (`ide/frontend/gui.py`) to extract and populate initial files.
+Use `scripts/stage1.py` to extract and populate initial files from a dtk-template project.
 
 ## Prompt Templates
 
@@ -184,8 +183,7 @@ project/
 ├── recomp_obj/
 ├── src/
 ├── logs/
-├── scripts/
-└── ide/
+└── scripts/
 ```
 
 This structured pipeline enables robust and verified assembly-to-C decompilation leveraging automated AI-assisted tools and detailed verification processes.
