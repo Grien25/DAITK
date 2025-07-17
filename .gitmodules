@@ -10,3 +10,6 @@
 [submodule "tools/PorpoiseTool"]
 	path = tools/PorpoiseTool
 	url = https://github.com/wowjinxy/PorpoiseTool.git
+[submodule "tools/m2c"]
+	path = tools/m2c
+	url = https://github.com/matt-kempster/m2c.git
