@@ -13,3 +13,12 @@
 [submodule "tools/m2c"]
 	path = tools/m2c
 	url = https://github.com/matt-kempster/m2c.git
+[submodule "DecompReference/key"]
+	path = DecompReference/key
+	url = https://github.com/Grien25/key.git
+[submodule "DecompReference/mkw"]
+	path = DecompReference/mkw
+	url = https://github.com/Grien25/mkw.git
+[submodule "DecompReference/rb3"]
+	path = DecompReference/rb3
+	url = https://github.com/Grien25/rb3.git
