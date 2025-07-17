@@ -1,0 +1,41 @@
+{
+  "name": "daitk-vscode-extension",
+  "displayName": "DAITK Extension",
+  "description": "DAITK VS Code extension with custom sidebar",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^4.8.4",
+    "tslib": "^2.4.1",
+    "@types/node": "^16.0.0"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "daitkSidebar",
+          "title": "DAITK",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "daitkSidebar": [
+        {
+          "id": "daitkActions",
+          "name": "Project Actions"
+        }
+      ]
+    }
+  },
+  "activationEvents": ["*"]
+}
