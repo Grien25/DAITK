@@ -1,9 +1,9 @@
-import tkinter as tk
-from tkinter import filedialog, ttk
-from tkinter.scrolledtext import ScrolledText
+from __future__ import annotations
+
 from pathlib import Path
-from threading import Thread
-from queue import Queue, Empty
+import asyncio
+
+from nicegui import ui
 
 
 def parse_functions(path: Path):
@@ -27,143 +27,77 @@ def parse_functions(path: Path):
         funcs.append((name, start, len(lines)))
     return funcs, lines
 
-class FunctionBrowser(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Assembly Function Browser")
-        self.geometry("800x500")
-        self.directory = tk.StringVar()
-        self.filter_var = tk.StringVar()
-        self.functions = []
-        self.lines = []
-        self.queue: Queue = Queue()
 
-        top_frame = ttk.Frame(self)
-        top_frame.pack(fill=tk.X, pady=5, padx=5)
-        ttk.Button(top_frame, text="Select Folder", command=self.select_folder).pack(side=tk.LEFT)
-        ttk.Entry(top_frame, textvariable=self.directory, state="readonly").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+class Browser:
+    def __init__(self) -> None:
+        self.folder = ui.input('ASM folder').props('dense')
+        ui.button('Scan', on_click=self.scan)
+        self.filter = ui.input('Filter files').props('dense').on('keydown.enter', self.scan)
+        self.message = ui.label('')
+        self.spinner = ui.spinner().props('size=md').props('color=primary')
+        self.spinner.set_visibility(False)
 
-        filter_frame = ttk.Frame(self)
-        filter_frame.pack(fill=tk.X, padx=5)
-        ttk.Label(filter_frame, text="Filter:").pack(side=tk.LEFT)
-        filter_entry = ttk.Entry(filter_frame, textvariable=self.filter_var)
-        filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        filter_entry.bind("<KeyRelease>", lambda e: self.start_file_scan())
+        with ui.row():
+            self.file_table = ui.table(columns=[{'name': 'file', 'label': 'ASM File', 'field': 'file'}],
+                                       rows=[], row_key='id', selection='single').on('select', self.load_file)
+            self.func_table = ui.table(columns=[{'name': 'func', 'label': 'Function', 'field': 'func'}],
+                                        rows=[], row_key='id', selection='single').on('select', self.show_function)
 
-        body = ttk.Frame(self)
-        body.pack(fill=tk.BOTH, expand=True)
+        self.functions: list[tuple[str, int, int]] = []
+        self.lines: list[str] = []
 
-        left = ttk.Frame(body)
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 2), pady=5)
-        right = ttk.Frame(body)
-        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(2, 5), pady=5)
+    async def _scan_files(self, folder: Path, filt: str):
+        files = [f.name for f in sorted(folder.glob('*.s')) if not filt or filt in f.name.lower()]
+        return [{'id': i, 'file': name} for i, name in enumerate(files)]
 
-        self.files_tree = ttk.Treeview(left, columns=("file"), show="headings")
-        self.files_tree.heading("file", text="ASM File")
-        self.files_tree.pack(fill=tk.BOTH, expand=True)
-        self.files_tree.bind("<<TreeviewSelect>>", self.on_file_select)
-
-        self.func_tree = ttk.Treeview(right, columns=("func"), show="headings")
-        self.func_tree.heading("func", text="Function")
-        self.func_tree.pack(fill=tk.BOTH, expand=True)
-        self.func_tree.bind("<Double-1>", self.open_function)
-
-        # Progress indicator at the bottom
-        self.progress = ttk.Label(self, text="")
-        self.progress.pack(fill=tk.X, side=tk.BOTTOM)
-        self.progress_bar = ttk.Progressbar(self, mode="indeterminate")
-
-        # Periodically process queued results from background threads
-        self.after(100, self.process_queue)
-
-    def select_folder(self):
-        path = filedialog.askdirectory()
-        if path:
-            self.directory.set(path)
-            self.start_file_scan()
-
-    def start_file_scan(self):
-        """Scan selected folder in a background thread."""
-        self.files_tree.delete(*self.files_tree.get_children())
-        self.func_tree.delete(*self.func_tree.get_children())
-        folder = Path(self.directory.get())
+    async def scan(self) -> None:
+        folder = Path(self.folder.value)
         if not folder.is_dir():
+            self.message.text = 'Invalid folder'
             return
-        self.progress.config(text="Scanning files...")
-        self.progress_bar.pack(fill=tk.X, side=tk.BOTTOM)
-        self.progress_bar.start()
-        Thread(target=self._scan_files, args=(folder, self.filter_var.get().lower()), daemon=True).start()
+        self.message.text = 'Scanning files...'
+        self.spinner.set_visibility(True)
+        files = await asyncio.get_event_loop().run_in_executor(None, self._scan_files, folder, self.filter.value.lower())
+        self.file_table.rows = files
+        self.func_table.rows = []
+        self.spinner.set_visibility(False)
+        self.message.text = ''
 
-    def _scan_files(self, folder: Path, filt: str):
-        files = []
-        for f in sorted(folder.glob("*.s")):
-            name = f.name
-            if filt and filt not in name.lower():
-                continue
-            files.append(name)
-        self.queue.put(("files", files))
+    async def _parse_file(self, path: Path):
+        funcs, lines = parse_functions(path)
+        rows = [{'id': i, 'func': name} for i, (name, _s, _e) in enumerate(funcs)]
+        return rows, funcs, lines
 
-    def on_file_select(self, _event=None):
-        sel = self.files_tree.selection()
+    async def load_file(self, e):
+        sel = e.selection
         if not sel:
             return
-        filename = self.files_tree.item(sel[0], "values")[0]
-        file_path = Path(self.directory.get()) / filename
-        self.progress.config(text="Parsing functions...")
-        self.progress_bar.pack(fill=tk.X, side=tk.BOTTOM)
-        self.progress_bar.start()
-        Thread(target=self._parse_file, args=(file_path,), daemon=True).start()
-
-    def _parse_file(self, file_path: Path):
-        funcs, lines = parse_functions(file_path)
-        self.queue.put(("functions", (funcs, lines)))
-
-    def open_function(self, _event=None):
-        sel = self.func_tree.selection()
-        if not sel:
-            return
-        idx = int(sel[0])
-        name, start, end = self.functions[idx]
-        asm_text = "\n".join(self.lines[start:end])
-        viewer = tk.Toplevel(self)
-        viewer.title(name)
-        viewer.geometry("900x600")
-        text = ScrolledText(viewer, wrap=tk.NONE)
-        text.pack(fill=tk.BOTH, expand=True)
-        text.insert("1.0", asm_text)
-        text.configure(state="disabled")
-
-    def process_queue(self):
-        """Handle results from worker threads."""
-        try:
-            while True:
-                msg, data = self.queue.get_nowait()
-                if msg == "files":
-                    self._update_files(data)
-                elif msg == "functions":
-                    self._update_functions(*data)
-        except Empty:
-            pass
-        finally:
-            self.after(100, self.process_queue)
-
-    def _update_files(self, files):
-        self.progress_bar.stop()
-        self.progress_bar.pack_forget()
-        self.progress.config(text="")
-        self.files_tree.delete(*self.files_tree.get_children())
-        for name in files:
-            self.files_tree.insert("", tk.END, values=(name,))
-
-    def _update_functions(self, funcs, lines):
-        self.progress_bar.stop()
-        self.progress_bar.pack_forget()
-        self.progress.config(text="")
+        filename = sel[0]['file']
+        file_path = Path(self.folder.value) / filename
+        self.message.text = 'Parsing functions...'
+        self.spinner.set_visibility(True)
+        rows, funcs, lines = await asyncio.get_event_loop().run_in_executor(None, self._parse_file, file_path)
+        self.func_table.rows = rows
         self.functions = funcs
         self.lines = lines
-        self.func_tree.delete(*self.func_tree.get_children())
-        for i, (name, _s, _e) in enumerate(funcs):
-            self.func_tree.insert("", tk.END, iid=str(i), values=(name,))
+        self.spinner.set_visibility(False)
+        self.message.text = ''
 
-if __name__ == "__main__":
-    FunctionBrowser().mainloop()
+    async def show_function(self, e):
+        sel = e.selection
+        if not sel:
+            return
+        idx = int(sel[0]['id'])
+        name, start, end = self.functions[idx]
+        asm_text = '\n'.join(self.lines[start:end])
+        with ui.dialog() as dialog:
+            with ui.card():
+                ui.label(name)
+                ui.textarea(asm_text).props('readonly autogrow').classes('w-full')
+                ui.button('Close', on_click=dialog.close)
+        dialog.open()
+
+
+if __name__ == '__main__':
+    Browser()
+    ui.run(title='Assembly Browser')

@@ -71,13 +71,14 @@ logs/        (diff/build logs)
 scripts/     (automation scripts)
 ```
 
-Once the assembly files are produced, you can browse them with a small GUI:
+Once the assembly files are produced, you can browse them in your browser using **NiceGUI**.
+Install it via `pip install nicegui` and start the server:
 
-```
+```bash
 python3 scripts/function_browser.py
 ```
 
-Select your `asm/` folder to list all `.s` files. The browser scans in a background thread and shows a small progress bar while loading. The selected file's functions appear in a second table. Double-click a function to view its assembly in a separate window.
+Enter the path to your `asm/` folder and click **Scan**. The left table lists all `.s` files. Selecting a file fills the right-hand table with its functions. Double-click a function to open the assembly snippet in a dialog.
 
 ## Prompt Templates
 
