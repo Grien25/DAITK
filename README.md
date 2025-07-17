@@ -68,17 +68,15 @@ orig_obj/    (original objects)
 recomp_obj/  (recompiled objects)
 src/         (AI-generated C)
 logs/        (diff/build logs)
-scripts/     (automation scripts)
 ```
 
-Once the assembly files are produced, you can browse them in your browser using **NiceGUI**.
-Install it via `pip install nicegui` and start the server:
+Once the assembly files are produced, you can browse them using a simple Tkinter GUI:
 
 ```bash
-python3 scripts/function_browser.py
+python3 src/function_browser.py
 ```
 
-Enter the path to your `asm/` folder and click **Scan**. The left table lists all `.s` files. Selecting a file fills the right-hand table with its functions. Double-click a function to open the assembly snippet in a dialog.
+Select your `asm/` folder and click **Scan**. The left table lists `.s` files while the right table shows functions from the selected file. Double-click a function to view its assembly in a separate window.
 
 ## Prompt Templates
 
@@ -188,7 +186,6 @@ orig_obj/
 recomp_obj/
 src/
 logs/
-scripts/
 ```
 
 This structured pipeline enables robust and verified assembly-to-C decompilation leveraging automated AI-assisted tools and detailed verification processes.
