@@ -22,3 +22,6 @@
 [submodule "DecompReference/rb3"]
 	path = DecompReference/rb3
 	url = https://github.com/Grien25/rb3.git
+[submodule "DecompReference/libogc"]
+	path = DecompReference/libogc
+	url = https://github.com/devkitPro/libogc.git
