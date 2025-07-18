@@ -25,3 +25,6 @@
 [submodule "DecompReference/libogc"]
 	path = DecompReference/libogc
 	url = https://github.com/devkitPro/libogc.git
+[submodule "tools/mathwise-studgen007"]
+	path = tools/mathwise-studgen007
+	url = https://github.com/Grien25/mathwise-studgen007.git

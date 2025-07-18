@@ -28,12 +28,12 @@ class LocalLLM(BaseLLM):
         return "[Local LLM decompilation not implemented]"
 
 class GeminiLLM(BaseLLM):
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-pro"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-1.5-flash"):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        # Allow selecting a specific model version; default to Gemini Pro.
-        self.model = model
+        # Default to Gemini 1.5 Flash, which is available for v1 endpoint.
+        self.model = model or "gemini-1.5-flash"
         self.api_url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+            f"https://generativelanguage.googleapis.com/v1/models/{self.model}:generateContent?key={self.api_key}"
         )
 
     def decompile(self, asm_code: str) -> str:
@@ -86,7 +86,7 @@ class GeminiLLM(BaseLLM):
         if not self.api_key:
             return "[Gemini API error: missing API key]"
 
-        print("Sending request to Gemini API...")
+        print(f"Sending request to Gemini API endpoint: {self.api_url}")
         try:
             resp = requests.post(self.api_url, headers=headers, json=data, timeout=60)
             print("Response status code:", resp.status_code)
@@ -94,8 +94,11 @@ class GeminiLLM(BaseLLM):
             resp.raise_for_status()
             result = resp.json()
             candidates = result.get("candidates", [])
-            if candidates:
+            if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"] and candidates[0]["content"]["parts"]:
                 return candidates[0]["content"]["parts"][0]["text"]
+            elif "error" in result:
+                error_msg = result["error"].get("message", "Unknown error")
+                return f"[Gemini API error: {error_msg}]"
             return "[No response from Gemini API]"
         except Exception as e:
             print("Gemini API error:", e)
