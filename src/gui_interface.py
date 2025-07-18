@@ -1,17 +1,20 @@
 import tkinter as tk
 from tkinter import filedialog, ttk, scrolledtext, messagebox
+from tkinter.scrolledtext import ScrolledText
 from decompiler import decompile_asm_file
 from assembly_parser import extract_functions_from_asm
+import threading
+
+GEMINI_API_KEY = "AIzaSyD1maEHkPkJvIokonRLV-FJvwCrLWJXMFk"
 
 class DecompilerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("AI Decompiler for Assembly Functions")
         self.file_path = tk.StringVar()
-        self.backend = tk.StringVar(value='local')
-        self.model_path = tk.StringVar()
-        self.api_key = tk.StringVar()
         self.functions = []  # List of dicts from extract_functions_from_asm
+        self.loading_var = tk.StringVar(value="")
+        self.output_text = None
 
         self.create_widgets()
         # Remove file_path trace for auto-scan
@@ -21,28 +24,20 @@ class DecompilerGUI:
         frm = ttk.Frame(self.root, padding=10)
         frm.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(frm, text="Assembly (.s) file:").grid(row=0, column=0, sticky="w")
-        file_entry = ttk.Entry(frm, textvariable=self.file_path, width=40)
-        file_entry.grid(row=0, column=1, sticky="ew")
         ttk.Button(frm, text="Browse", command=self.browse_file).grid(row=0, column=2)
         ttk.Button(frm, text="Scan", command=self.scan_functions).grid(row=0, column=3, padx=(10,0))
 
-        ttk.Label(frm, text="LLM Backend:").grid(row=1, column=0, sticky="w")
-        backend_combo = ttk.Combobox(frm, textvariable=self.backend, values=["local", "gemini"], state="readonly", width=10)
-        backend_combo.grid(row=1, column=1, sticky="w")
-        backend_combo.bind('<<ComboboxSelected>>', self.update_backend_fields)
+        # Remove backend and model path fields
 
-        self.model_path_label = ttk.Label(frm, text="Model Path:")
-        self.model_path_entry = ttk.Entry(frm, textvariable=self.model_path, width=40)
-        self.api_key_label = ttk.Label(frm, text="Gemini API Key:")
-        self.api_key_entry = ttk.Entry(frm, textvariable=self.api_key, width=40, show="*")
+        ttk.Button(frm, text="Decompile", command=self.run_decompilation).grid(row=1, column=0, columnspan=4, pady=10)
 
-        self.model_path_label.grid(row=2, column=0, sticky="w")
-        self.model_path_entry.grid(row=2, column=1, sticky="ew")
-        self.api_key_label.grid_forget()
-        self.api_key_entry.grid_forget()
+        # Loading indicator
+        self.loading_label = ttk.Label(frm, textvariable=self.loading_var, foreground="blue")
+        self.loading_label.grid(row=2, column=0, columnspan=4, pady=(5,0))
 
-        ttk.Button(frm, text="Decompile", command=self.run_decompilation).grid(row=3, column=0, columnspan=4, pady=10)
+        # Output box for results/errors
+        self.output_text = ScrolledText(self.root, width=100, height=25)
+        self.output_text.grid(row=1, column=0, columnspan=4, padx=10, pady=10)
 
         # Function list and assembly display
         bottom_frame = ttk.Frame(frm)
@@ -64,7 +59,7 @@ class DecompilerGUI:
         self.output_is_visible = False
 
         frm.columnconfigure(1, weight=1)
-        self.update_backend_fields()
+        # self.update_backend_fields() # Removed
 
     def browse_file(self):
         path = filedialog.askopenfilename(filetypes=[("Assembly files", "*.s")])
@@ -104,45 +99,52 @@ class DecompilerGUI:
         self.asm_text.delete(1.0, tk.END)
         self.asm_text.insert(tk.END, func['code'])
 
-    def update_backend_fields(self, event=None):
-        if self.backend.get() == 'local':
-            self.model_path_label.grid(row=2, column=0, sticky="w")
-            self.model_path_entry.grid(row=2, column=1, sticky="ew")
-            self.api_key_label.grid_forget()
-            self.api_key_entry.grid_forget()
-        else:
-            self.model_path_label.grid_forget()
-            self.model_path_entry.grid_forget()
-            self.api_key_label.grid(row=2, column=0, sticky="w")
-            self.api_key_entry.grid(row=2, column=1, sticky="ew")
+    # def update_backend_fields(self, event=None): # Removed
+    #     if self.backend.get() == "local": # Removed
+    #         self.model_path_label.grid() # Removed
+    #         self.model_path_entry.grid() # Removed
+    #         # self.api_key_label.grid_remove()  # Removed
+    #         # self.api_key_entry.grid_remove()  # Removed
+    #     elif self.backend.get() == "gemini": # Removed
+    #         self.model_path_label.grid_remove() # Removed
+    #         self.model_path_entry.grid_remove() # Removed
+    #         # self.api_key_label.grid()  # Removed
+    #         # self.api_key_entry.grid()  # Removed
 
     def run_decompilation(self):
-        if not self.output_is_visible:
-            self.output.grid(row=5, column=0, columnspan=4, pady=5)
-            self.output_is_visible = True
-        self.output.delete(1.0, tk.END)
         file_path = self.file_path.get()
-        backend = self.backend.get()
-        llm_kwargs = {}
-        if backend == 'local' and self.model_path.get():
-            llm_kwargs['model_path'] = self.model_path.get()
-        if backend == 'gemini' and self.api_key.get():
-            llm_kwargs['api_key'] = self.api_key.get()
+        llm_kwargs = {'api_key': GEMINI_API_KEY}
         if not file_path:
             messagebox.showerror("Error", "Please select an assembly (.s) file.")
             return
+        # Show loading
+        self.loading_var.set("Decompiling... Please wait.")
+        self.root.update_idletasks()
+        # Run decompilation in a thread to avoid blocking the GUI
+        threading.Thread(target=self._decompile_thread, args=(file_path, llm_kwargs), daemon=True).start()
+
+    def _decompile_thread(self, file_path, llm_kwargs):
         try:
-            results = decompile_asm_file(file_path, backend, llm_kwargs)
+            print("Starting decompilation...")  # Debug print
+            results = decompile_asm_file(file_path, 'gemini', llm_kwargs)
+            print("Decompilation results:", results)  # Debug print
+            output = ""
             for func in results:
-                self.output.insert(tk.END, f"\nFunction: {func['name']} (lines {func['start_line']}-{func['end_line']})\n")
-                self.output.insert(tk.END, "Assembly:\n" + func['asm_code'] + "\n")
-                self.output.insert(tk.END, "Decompiled:\n" + func['decompiled_code'] + "\n")
-                self.output.insert(tk.END, "-"*60 + "\n")
+                output += f"\nFunction: {func['name']} (lines {func['start_line']}-{func['end_line']})\n"
+                output += "Assembly:\n" + func['asm_code'] + "\n"
+                output += "Decompiled:\n" + func['decompiled_code'] + "\n"
+                output += "-"*60 + "\n"
+            self.root.after(0, self._update_output, output)
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-            if self.output_is_visible:
-                self.output.grid_remove()
-                self.output_is_visible = False
+            self.loading_var.set("")
+            print("Error during decompilation:", e)  # Debug print
+            self.root.after(0, self._update_output, f"Error: {e}")
+            return
+        self.loading_var.set("")
+
+    def _update_output(self, text):
+        self.output_text.delete(1.0, tk.END)
+        self.output_text.insert(tk.END, text)
 
 
 def main():
