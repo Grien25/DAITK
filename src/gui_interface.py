@@ -4,8 +4,10 @@ from tkinter.scrolledtext import ScrolledText
 from decompiler import decompile_asm_file
 from assembly_parser import extract_functions_from_asm
 import threading
+import os
 
-GEMINI_API_KEY = "AIzaSyD1maEHkPkJvIokonRLV-FJvwCrLWJXMFk"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 class DecompilerGUI:
     def __init__(self, root):
@@ -113,7 +115,7 @@ class DecompilerGUI:
 
     def run_decompilation(self):
         file_path = self.file_path.get()
-        llm_kwargs = {'api_key': GEMINI_API_KEY}
+        llm_kwargs = {'api_key': GEMINI_API_KEY, 'model': GEMINI_MODEL}
         if not file_path:
             messagebox.showerror("Error", "Please select an assembly (.s) file.")
             return
@@ -126,7 +128,9 @@ class DecompilerGUI:
     def _decompile_thread(self, file_path, llm_kwargs):
         try:
             print("Starting decompilation...")  # Debug print
-            results = decompile_asm_file(file_path, 'gemini', llm_kwargs)
+            selection = self.func_listbox.curselection()
+            target = [self.functions[selection[0]]['name']] if selection else None
+            results = decompile_asm_file(file_path, 'gemini', llm_kwargs, target)
             print("Decompilation results:", results)  # Debug print
             output = ""
             for func in results:

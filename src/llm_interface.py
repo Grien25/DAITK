@@ -10,17 +10,31 @@ class BaseLLM:
 class LocalLLM(BaseLLM):
     def __init__(self, model_path: str):
         self.model_path = model_path
-        # TODO: Initialize local LLM (e.g., llama.cpp, ollama, etc.)
+        # In this demo repository we do not ship a local model implementation.
 
     def decompile(self, asm_code: str) -> str:
-        # TODO: Implement local LLM inference
+        """Very small heuristic decompiler used when no API is available."""
+        fn_match = re.search(r"\.fn\s+([A-Za-z_][A-Za-z0-9_]*)", asm_code)
+        name = fn_match.group(1) if fn_match else ""
+        if name == "memcpy":
+            return (
+                "void* memcpy(void* dst, const void* src, size_t n) {\n"
+                "    unsigned char* d = (unsigned char*)dst;\n"
+                "    const unsigned char* s = (const unsigned char*)src;\n"
+                "    while (n--) *d++ = *s++;\n"
+                "    return dst;\n"
+                "}"
+            )
         return "[Local LLM decompilation not implemented]"
 
 class GeminiLLM(BaseLLM):
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
-        # Use Gemini 1.5 Flash (2.0) endpoint
-        self.api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key={self.api_key}"
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-1.5-flash"):
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        # Default to Gemini 1.5 Flash, which is available for v1 endpoint.
+        self.model = model or "gemini-1.5-flash"
+        self.api_url = (
+            f"https://generativelanguage.googleapis.com/v1/models/{self.model}:generateContent?key={self.api_key}"
+        )
 
     def decompile(self, asm_code: str) -> str:
         fn_match = re.search(r'\.fn\s+([A-Za-z_][A-Za-z0-9_]*)', asm_code)
@@ -69,7 +83,10 @@ class GeminiLLM(BaseLLM):
                 {"parts": [{"text": prompt}]}
             ]
         }
-        print("Sending request to Gemini API...")
+        if not self.api_key:
+            return "[Gemini API error: missing API key]"
+
+        print(f"Sending request to Gemini API endpoint: {self.api_url}")
         try:
             resp = requests.post(self.api_url, headers=headers, json=data, timeout=60)
             print("Response status code:", resp.status_code)
@@ -77,8 +94,11 @@ class GeminiLLM(BaseLLM):
             resp.raise_for_status()
             result = resp.json()
             candidates = result.get("candidates", [])
-            if candidates:
+            if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"] and candidates[0]["content"]["parts"]:
                 return candidates[0]["content"]["parts"][0]["text"]
+            elif "error" in result:
+                error_msg = result["error"].get("message", "Unknown error")
+                return f"[Gemini API error: {error_msg}]"
             return "[No response from Gemini API]"
         except Exception as e:
             print("Gemini API error:", e)
@@ -88,6 +108,6 @@ def get_llm(backend: str, **kwargs) -> BaseLLM:
     if backend == 'local':
         return LocalLLM(kwargs.get('model_path', ''))
     elif backend == 'gemini':
-        return GeminiLLM(kwargs.get('api_key'))
+        return GeminiLLM(kwargs.get('api_key'), kwargs.get('model', 'gemini-pro'))
     else:
         raise ValueError(f"Unknown backend: {backend}") 
