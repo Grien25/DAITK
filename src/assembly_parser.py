@@ -28,4 +28,4 @@ def extract_functions_from_asm(file_path: str) -> List[Dict]:
             })
             func_start = None
             func_name = None
-    return functions 
+    return functions
