@@ -25,5 +25,5 @@ def decompile_asm_file(file_path: str, llm_backend: str, llm_kwargs: Optional[Di
             'end_line': func['end_line']
         })
         # Place the decompiled function in the correct file
-        place_decompiled_function(func['name'], decompiled)
+        # place_decompiled_function(func['name'], decompiled)
     return results 

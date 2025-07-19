@@ -68,7 +68,10 @@ class GeminiLLM(BaseLLM):
 
     def _build_prompt(self, asm_code, reference_code=None):
         prompt = (
-            "Decompile the following PowerPC assembly function to C. Use idiomatic C and standard library conventions if possible.\n\n"
+            "Decompile the following PowerPC assembly function to C. "
+            "The function is meant for the Nintendo Wii console, and was originally programmed by developers in 2006. "
+            "Please think like a 2006 Wii developer and tailor your code to the capabilities and conventions of that console and era. "
+            "Use idiomatic C and standard library conventions if possible.\n\n"
             f"Assembly:\n{asm_code}\n\n"
         )
         if reference_code:
