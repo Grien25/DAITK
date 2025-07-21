@@ -6,7 +6,7 @@ from assembly_parser import extract_functions_from_asm
 import threading
 import os
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = "AIzaSyDIkQe9MOnjVxcbF56bVASvXSNifdDGQlU"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 class DecompilerGUI:
